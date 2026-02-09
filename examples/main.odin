@@ -22,7 +22,7 @@ main :: proc() {
 	catalan_solids := m.mesh_generate_all_catalan_solids()
 	defer m.meshes_destroy(..slice.enumerated_array(&catalan_solids))
 
-	selected_type : union #no_nil {m.Platonic_Solid, m.Archimedean_Solid, m.Catalan_Solid} = .Cube
+	selected_type : union #no_nil {m.Platonic_Solid, m.Archimedean_Solid, m.Catalan_Solid} = .Tetrahedron
 
 	rl.InitWindow(1000, 1000, "Mesh")
 	defer rl.CloseWindow()
@@ -38,14 +38,9 @@ main :: proc() {
 
 	draw_debug := false
 
-	m.mesh_split_edges_twice_all(&platonic_solids[.Cube])
-	m.mesh_convay_kis(&platonic_solids[.Cube], 0)
-	m.mesh_validate(platonic_solids[.Cube])
-
 	for !rl.WindowShouldClose() {
-
 		if rl.IsKeyPressed(.E) { draw_debug = ~draw_debug }
-		if rl.IsKeyPressed(.U) { selected_type = .Cube }
+		if rl.IsKeyPressed(.U) { selected_type = .Tetrahedron }
 		if rl.IsKeyPressed(.I) { selected_type = .Truncated_Tetrahedron }
 		if rl.IsKeyPressed(.P) { selected_type = .Triakis_Tetrahedron }
 
@@ -65,30 +60,27 @@ main :: proc() {
 			}
 		}
 
-		start := rl.Vector2{40, 40}
+		start := rl.Vector2{70, 40}
 		size := rl.Vector2{100, 50}
 		margin := rl.Vector2{5, 5}
-		for o in m.Convey_Operation {
-			if o == .Gyro || o == .Snub {
-				rl.DrawRectangleV(start, size, {85, 50, 55, 255})
-			} else {
-				rl.DrawRectangleV(start, size, {45, 50, 55, 255})
-			}
-			if rl.CheckCollisionPointRec(rl.GetMousePosition(), {start.x, start.y, size.x, size.y}) {
-				rl.DrawRectangleLinesEx({start.x, start.y, size.x, size.y}, 2, {80, 85, 100, 255})
+		for o in m.Convay_Operation {
+			text := rl.TextFormat("%v", o)
+			text_size := rl.MeasureTextEx(rl.GetFontDefault(), text, 20, 1)
+			d_pos := start + {-text_size.x / 2 + size.x / 2 - 8 if text_size.x > size.x else 0, 0}
+			d_size := rl.Vector2{max(size.x, text_size.x + 16), size.y}
+			rl.DrawRectangleV(d_pos, d_size, {45, 50, 55, 255})
+			rl.DrawTextEx(rl.GetFontDefault(), text, start - text_size / 2 + size / 2, 20, 1, rl.WHITE)
+			if rl.CheckCollisionPointRec(rl.GetMousePosition(), {d_pos.x, d_pos.y, d_size.x, d_size.y}) {
+				rl.DrawRectangleLinesEx({d_pos.x, d_pos.y, d_size.x, d_size.y}, 2, {80, 85, 100, 255})
 				if rl.IsMouseButtonPressed(.LEFT) {
 					switch v in selected_type {
 					case m.Catalan_Solid:		m.mesh_convay_operation(&catalan_solids[v], o)
-					case m.Platonic_Solid: 		m.mesh_convay_operation(&platonic_solids[v], o, kis_height = 0.5)
+					case m.Platonic_Solid: 		m.mesh_convay_operation(&platonic_solids[v], o)
 					case m.Archimedean_Solid: 	m.mesh_convay_operation(&archimedean_solids[v], o)
 					}
 				}
 			}
-
-			text := rl.TextFormat("%v", o)
-			text_size := rl.MeasureTextEx(rl.GetFontDefault(), text, 20, 1)
-			rl.DrawTextEx(rl.GetFontDefault(), text, start - text_size / 2 + size / 2, 20, 1, rl.WHITE)
-			start.y += size.y + margin.y
+			start.y += d_size.y + margin.y
 		}
 
 		{
@@ -124,7 +116,7 @@ main :: proc() {
 		}
 		rl.EndDrawing()
 	}
-}
+ }
 
 draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 	OFFSET_MAGNITUDE: f32 = 0.025 if draw_debug else 0
@@ -165,9 +157,9 @@ draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 
 	if !draw_debug { return }
 	for i in mesh.active_faces {
-		iter := m.mesh_create_face_walk_iterator(&mesh, i)
+		iter := m.mesh_create_face_edge_iterator(&mesh, i)
 		centroid := m.Vec3f32{}
-		for e, i in m.mesh_face_walk_iter(&iter) {
+		for e, i in m.mesh_face_edge_iter(&iter) {
 			centroid += mesh.verts[e.vertex].position
 		}
 		centroid /= f32(iter.step)

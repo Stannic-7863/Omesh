@@ -1,5 +1,6 @@
 package mesh
 
+import "core:image/netpbm"
 import "core:math/linalg"
 import "base:intrinsics"
 import "base:runtime"
@@ -44,10 +45,10 @@ Mesh :: struct {
 	free_faces: [dynamic]Face_Index,
 	free_verts: [dynamic]Vertex_Index,
 	free_edges: [dynamic]Half_Edge_Index,
-	lookup:     map[Lookup_Pair]Half_Edge_Index, // Source - Target
+	lookup:     map[Lookup_Pair]Half_Edge_Index, // Source -> Target
 }
 
-Face_Walk_Iterator :: struct {
+Face_Edge_Iterator :: struct {
 	mesh:	 ^Mesh,
 	step:	 i32,
 	start:	 Half_Edge_Index,
@@ -109,9 +110,9 @@ CATALAN_TRI_OCTAHEDRON_KIS_HEIGHT   	:: 0.414213
 CATALAN_PENTA_DODECAHEDRON_KIS_HEIGHT 	:: 0.11135
 CATALAN_TRI_ICOSAHEDRON_KIS_HEIGHT    	:: 0.15836
 
-Convey_Operation :: enum {
+Convay_Operation :: enum {
 	Ambo,
-	Bevel,
+	Bevel,					// Also called omnitruncation
 	Dual,
 	Expand,
 	Gyro,
@@ -122,7 +123,10 @@ Convey_Operation :: enum {
 	Snub,
 	Truncate,
 	Needle,
-	Zip,
+	Zip, 					// Also called bitruncation
+	Classical_Alternation, 	// Only works for meshes where vertices are 2 color-able. Basically Edge count of all faces must be even
+	Classical_Snub, 		// same limitation as classical alternation
+	Classical_Gyro, 		// same limitation as classical alternation
 }
 
 mesh_create :: proc(allocator: runtime.Allocator) -> Mesh {
@@ -164,7 +168,6 @@ meshes_destroy :: proc(meshes: ..Mesh) {
 		mesh_destroy(mesh)
 	}
 }
-
 
 mesh_get_face :: proc (mesh: Mesh, index: Face_Index) -> Face {
 	return mesh.faces[index]
@@ -299,7 +302,7 @@ mesh_get_edge_opposite_ptr_safe :: proc (mesh: Mesh, index: Half_Edge_Index) -> 
 	return mesh_get_edge_ptr_safe(mesh, e.opposite)
 }
 
-mesh_create_face_walk_iterator :: proc(mesh: ^Mesh, face: Face_Index) -> Face_Walk_Iterator {
+mesh_create_face_edge_iterator :: proc(mesh: ^Mesh, face: Face_Index) -> Face_Edge_Iterator {
 	return {
 		current = mesh.faces[face].edge,
 		start = mesh.faces[face].edge,
@@ -308,7 +311,7 @@ mesh_create_face_walk_iterator :: proc(mesh: ^Mesh, face: Face_Index) -> Face_Wa
 	}
 }
 
-mesh_face_walk_iter :: proc(iter: ^Face_Walk_Iterator) -> (^Half_Edge, Half_Edge_Index, bool) {
+mesh_face_edge_iter :: proc(iter: ^Face_Edge_Iterator) -> (^Half_Edge, Half_Edge_Index, bool) {
 	if iter.step > 0 && iter.current == iter.start {
 		return nil, -1, false
 	}
@@ -558,7 +561,7 @@ mesh_dissolve_vertex_rim :: proc(mesh: ^Mesh, vertex: Vertex_Index) -> (new_face
     return face
 }
 
-mesh_dissolve_half_edge_pair :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kept_face: Face_Index) {
+mesh_dissolve_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kept_face: Face_Index) {
 	if edge < 0 {return -1}
 
 	e := &mesh.edges[edge]
@@ -603,8 +606,8 @@ mesh_dissolve_half_edge_pair :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kep
 			mesh.faces[selected_edge.face].edge = selected_edge.next
 		}
 
-		iter := mesh_create_face_walk_iterator(mesh, selected_edge.face)
-		for face_e in mesh_face_walk_iter(&iter) {
+		iter := mesh_create_face_edge_iterator(mesh, selected_edge.face)
+		for face_e in mesh_face_edge_iter(&iter) {
 			face_e.face = selected_edge.face
 		}
 	}
@@ -618,8 +621,8 @@ mesh_dissolve_half_edge_pair :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kep
 }
 
 mesh_remove_face :: proc(mesh: ^Mesh, face: Face_Index) {
-	iter := mesh_create_face_walk_iterator(mesh, face)
-	for e in mesh_face_walk_iter(&iter) {
+	iter := mesh_create_face_edge_iterator(mesh, face)
+	for e in mesh_face_edge_iter(&iter) {
 		e.face = -1
 	}
 
@@ -633,8 +636,8 @@ mesh_merge_face :: proc(mesh: ^Mesh, face_a: Face_Index, face_b: Face_Index) -> 
 
 	common_edge := Half_Edge_Index(-1)
 
-	iter := mesh_create_face_walk_iterator(mesh, face_a)
-	for e, i in mesh_face_walk_iter(&iter) {
+	iter := mesh_create_face_edge_iterator(mesh, face_a)
+	for e, i in mesh_face_edge_iter(&iter) {
 		op := mesh.edges[e.opposite]
 		if op.face == face_b {
 			common_edge = i
@@ -642,7 +645,7 @@ mesh_merge_face :: proc(mesh: ^Mesh, face_a: Face_Index, face_b: Face_Index) -> 
 		}
 	}
 
-	return mesh_dissolve_half_edge_pair(mesh, common_edge)
+	return mesh_dissolve_half_edge(mesh, common_edge)
 }
 
 mesh_add_vertices :: proc(mesh: ^Mesh, positions: ..Vec3f32) {
@@ -711,7 +714,7 @@ mesh_add_face :: proc(mesh: ^Mesh, face: []Vertex_Index) -> Face_Index {
 	return face_index
 }
 
-mesh_split_edges_all :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
+mesh_split_edges_all :: proc(mesh: ^Mesh, factor := f32(0.5), temp_alloc := context.temp_allocator) {
 	prev_edges := make([dynamic]Half_Edge_Index, len(mesh.active_edges), temp_alloc)
 	lookup := make(map[Half_Edge_Index]struct{}, len(mesh.active_edges), temp_alloc)
 	copy(prev_edges[:], mesh.active_edges[:])
@@ -719,13 +722,13 @@ mesh_split_edges_all :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) 
 	for i in prev_edges {
 		_, done := lookup[i]
 		if !done {
-			mesh_split_edge(mesh, i)
+			mesh_split_edge(mesh, i, factor)
 			lookup[mesh.edges[i].opposite] = {}
 		}
 	}
 }
 
-mesh_split_edges_twice_all :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
+mesh_split_edges_twice_all :: proc(mesh: ^Mesh, factor := f32(0.5), temp_alloc := context.temp_allocator) {
 	prev_edges := make([dynamic]Half_Edge_Index, len(mesh.active_edges), temp_alloc)
 	lookup := make(map[Half_Edge_Index]struct{}, len(mesh.active_edges), temp_alloc)
 	copy(prev_edges[:], mesh.active_edges[:])
@@ -733,13 +736,13 @@ mesh_split_edges_twice_all :: proc(mesh: ^Mesh, temp_alloc := context.temp_alloc
 	for i in prev_edges {
 		_, done := lookup[i]
 		if !done {
-			mesh_split_edge_twice(mesh, i)
+			mesh_split_edge_twice(mesh, i, factor)
 			lookup[mesh.edges[i].opposite] = {}
 		}
 	}
 }
 
-mesh_split_edge_twice :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index) {
+mesh_split_edge_twice :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index, factor := f32(0.5)) {
 	new_e_index := mesh_alloc_half_edge(mesh, {})
 	new_e_op_index := mesh_alloc_half_edge(mesh, {})
 	new_e1_index := mesh_alloc_half_edge(mesh, {})
@@ -762,8 +765,9 @@ mesh_split_edge_twice :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index) {
 
 	new_vertex := &mesh.verts[new_vertex_index]
 	new_vertex1 := &mesh.verts[new_vertex1_index]
-	new_vertex.position = source.position + (target.position - source.position) * 0.666666666
-	new_vertex1.position = source.position + (target.position - source.position) * 0.333333333
+	mid_point := (source.position + target.position) / 2
+	new_vertex.position = target.position + (mid_point - target.position) * factor
+	new_vertex1.position = source.position + (mid_point - source.position) * factor
 
 	new_e := &mesh.edges[new_e_index]
 	new_e_op := &mesh.edges[new_e_op_index]
@@ -833,7 +837,8 @@ mesh_split_edge_twice :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index) {
 	mesh.lookup[Lookup_Pair{target_index, new_vertex_index}] 		= new_e_op_index
 }
 
-mesh_split_edge :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index) -> (Half_Edge_Index) {
+// Factor defines where to place the vertex. Factor of 0 will place the vertex at the source, and factor of 1 will place the vertex at target
+mesh_split_edge :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index, factor := f32(0.5)) -> (Half_Edge_Index) {
 	new_e_index := mesh_alloc_half_edge(mesh, {})
 	new_e_op_index := mesh_alloc_half_edge(mesh, {})
 	new_vertex_index := mesh_alloc_vertex(mesh, {})
@@ -852,7 +857,7 @@ mesh_split_edge :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index) -> (Half_
 	target_index, source_index := e.vertex, e_op.vertex
 	target, source := &mesh.verts[target_index], &mesh.verts[source_index]
 	new_vertex := &mesh.verts[new_vertex_index]
-	new_vertex.position = (source.position + target.position) / 2
+	new_vertex.position = source.position + (target.position - source.position) * factor
 
 	new_e := &mesh.edges[new_e_index]
 	new_e_op := &mesh.edges[new_e_op_index]
@@ -903,15 +908,15 @@ mesh_split_face :: proc(mesh: ^Mesh, face_index: Face_Index, a_index, b_index: V
 	outgoing_a_index, outgoing_b_index := Half_Edge_Index(-1), Half_Edge_Index(-1)
 
 	if a_index == b_index {
-		log.errorf("Same vertex cannot be used to split a face")
+		log.warnf("Same vertex cannot be used to split a face")
 		return true
 	}
 
 	{ 	// Validate inputs first
 		found_a, found_b := false, false
 
-		iter := mesh_create_face_walk_iterator(mesh, face_index)
-		for e, i in mesh_face_walk_iter(&iter) {
+		iter := mesh_create_face_edge_iterator(mesh, face_index)
+		for e, i in mesh_face_edge_iter(&iter) {
 			if e.vertex == a_index {
 				found_a = true
 				incomming_a_index = i
@@ -923,7 +928,7 @@ mesh_split_face :: proc(mesh: ^Mesh, face_index: Face_Index, a_index, b_index: V
 		}
 
 		if !found_b || !found_a {
-			log.errorf("Vertices do not belong to provided face. Face Index : %i, Face : %v, Vertex a : %i, Vertex b : %i", face_index, face, a_index, b_index)
+			log.warnf("Vertices do not belong to provided face. Face Index : %i, Face : %v, Vertex a : %i, Vertex b : %i", face_index, face, a_index, b_index)
 			return true
 		}
 	}
@@ -932,7 +937,7 @@ mesh_split_face :: proc(mesh: ^Mesh, face_index: Face_Index, a_index, b_index: V
 	outgoing_b_index = mesh.edges[incomming_b_index].next
 
 	if mesh.edges[outgoing_a_index].next == outgoing_b_index || mesh.edges[outgoing_b_index].next == outgoing_a_index {
-		log.errorf("Two adjacent vertices cannot be used to split a face. Vertex a : %i, Vertex b : %i", a_index, b_index)
+		log.warnf("Two adjacent vertices cannot be used to split a face. Vertex a : %i, Vertex b : %i", a_index, b_index)
 		return true
 	}
 
@@ -969,13 +974,13 @@ mesh_split_face :: proc(mesh: ^Mesh, face_index: Face_Index, a_index, b_index: V
 	b_to_a.face = new_face_index
 
 	{ 	// Set the correct face for half-edges
-		iter := mesh_create_face_walk_iterator(mesh, face_index)
-		for e in mesh_face_walk_iter(&iter) {
+		iter := mesh_create_face_edge_iterator(mesh, face_index)
+		for e in mesh_face_edge_iter(&iter) {
 			e.face = face_index
 		}
 
-		iter = mesh_create_face_walk_iterator(mesh, new_face_index)
-		for e in mesh_face_walk_iter(&iter) {
+		iter = mesh_create_face_edge_iterator(mesh, new_face_index)
+		for e in mesh_face_edge_iter(&iter) {
 			e.face = new_face_index
 		}
 	}
@@ -1023,8 +1028,8 @@ mesh_whirl_face :: proc(mesh: ^Mesh, face: Face_Index, twist_factor := f32(0.33)
     original_verts := make([dynamic]Vertex_Index, temp_alloc)
 
     centroid := Vec3f32{}
-    iter := mesh_create_face_walk_iterator(mesh, face)
-    for e, e_idx in mesh_face_walk_iter(&iter) {
+    iter := mesh_create_face_edge_iterator(mesh, face)
+    for e, e_idx in mesh_face_edge_iter(&iter) {
         v_idx := mesh.edges[e_idx].vertex
         centroid += mesh.verts[v_idx].position
         append(&original_edges, e_idx)
@@ -1216,8 +1221,8 @@ mesh_whirl_face :: proc(mesh: ^Mesh, face: Face_Index, twist_factor := f32(0.33)
 mesh_triangulate_face_from_centroid :: proc (mesh: ^Mesh, face: Face_Index, height := f32(0), temp_alloc := context.temp_allocator) -> Vertex_Index {
     collected_edges := make([dynamic]Half_Edge_Index, temp_alloc)
 	centroid := Vec3f32{}
-    iter := mesh_create_face_walk_iterator(mesh, face)
-    for e, i in mesh_face_walk_iter(&iter) {
+    iter := mesh_create_face_edge_iterator(mesh, face)
+    for e, i in mesh_face_edge_iter(&iter) {
         centroid += mesh.verts[e.vertex].position
         append(&collected_edges, i)
     }
@@ -1284,8 +1289,8 @@ mesh_triangulate_face_from_vertex :: proc(mesh: ^Mesh, face: Face_Index, vertex:
 
 mesh_calculate_face_normal :: proc(mesh: ^Mesh, face: Face_Index) -> Vec3f32 {
 	normal := Vec3f32{}
-	iter := mesh_create_face_walk_iterator(mesh, face)
-	for e_c in mesh_face_walk_iter(&iter) {
+	iter := mesh_create_face_edge_iterator(mesh, face)
+	for e_c in mesh_face_edge_iter(&iter) {
 		v_c := mesh.verts[e_c.vertex].position
 		v_n := mesh.verts[mesh.edges[e_c.next].vertex].position
 
@@ -1315,8 +1320,8 @@ mesh_convay_dual :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
 
     for f in mesh.active_faces {
 		centroid := Vec3f32{}
-		iter := mesh_create_face_walk_iterator(mesh, f)
-		for e, i in mesh_face_walk_iter(&iter) {
+		iter := mesh_create_face_edge_iterator(mesh, f)
+		for e, i in mesh_face_edge_iter(&iter) {
 			centroid += mesh.verts[e.vertex].position
 		}
 		centroid /= f32(iter.step)
@@ -1337,99 +1342,173 @@ mesh_convay_dual :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
 	mesh^ = dual
 }
 
-mesh_convay_kis :: proc(mesh: ^Mesh, height := f32(1), temp_alloc := context.temp_allocator) {
+mesh_convay_kis :: proc(mesh: ^Mesh, kis_height := f32(0.5), temp_alloc := context.temp_allocator) {
 	faces := make([dynamic]Face_Index, len(mesh.active_faces), temp_alloc)
 	copy(faces[:], mesh.active_faces[:])
 
 	for f in faces {
-		mesh_triangulate_face_from_centroid(mesh, f, height, temp_alloc)
+		mesh_triangulate_face_from_centroid(mesh, f, kis_height, temp_alloc)
 	}
 }
 
-mesh_convay_ambo :: proc (mesh: ^Mesh, temp_alloc := context.temp_allocator) {
+mesh_convay_ambo :: proc (mesh: ^Mesh, ambo_factor := f32(0.5), temp_alloc := context.temp_allocator) {
 	verts := make([dynamic]Vertex_Index, len(mesh.active_verts), temp_alloc)
 	copy(verts[:], mesh.active_verts[:])
 
-	mesh_split_edges_all(mesh, temp_alloc)
+	mesh_split_edges_all(mesh, ambo_factor, temp_alloc)
 
 	for i in verts {
 		mesh_dissolve_vertex_face_split(mesh, i, temp_alloc)
 	}
 }
 
-mesh_convay_truncate :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
+mesh_convay_truncate :: proc(mesh: ^Mesh, truncate_factor := f32(2.0/3.0), temp_alloc := context.temp_allocator) {
 	verts :=  make([dynamic]Vertex_Index, len(mesh.active_verts), temp_alloc)
 	copy(verts[:], mesh.active_verts[:])
 
-	mesh_split_edges_twice_all(mesh, temp_alloc)
+	mesh_split_edges_twice_all(mesh, truncate_factor, temp_alloc)
 
 	for v in verts {
 		mesh_dissolve_vertex_face_split(mesh, v, temp_alloc)
 	}
 }
 
-mesh_convay_snub :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
+mesh_convay_snub :: proc(mesh: ^Mesh, truncate_factor := f32(2.0/3.0), gyro_height := f32(0.5), kis_height := f32(0.5), temp_alloc := context.temp_allocator) {
+	mesh_convay_gyro(mesh, truncate_factor, gyro_height, temp_alloc)
+	mesh_convay_kis(mesh, kis_height, temp_alloc)
 }
 
-mesh_convay_gyro :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-}
+mesh_convay_gyro :: proc(mesh: ^Mesh, truncate_factor := f32(2.0/3.0), height := f32(0.5), temp_alloc := context.temp_allocator) {
+	verts := make([dynamic]Vertex_Index, len(mesh.active_verts), temp_alloc)
+	faces := make([dynamic]Face_Index, len(mesh.active_faces), temp_alloc)
+	copy(verts[:], mesh.active_verts[:])
+	copy(faces[:], mesh.active_faces[:])
 
-mesh_convay_bevel :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_ambo(mesh, temp_alloc)
-	mesh_convay_truncate(mesh, temp_alloc)
-}
+	mesh_split_edges_twice_all(mesh, truncate_factor, temp_alloc)
 
-mesh_convay_expand :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_ambo(mesh, temp_alloc)
-	mesh_convay_ambo(mesh, temp_alloc)
-}
+	for f in faces {
+		centroid_vert := mesh_triangulate_face_from_centroid(mesh, f, height, temp_alloc)
 
-mesh_convay_join :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_dual(mesh, temp_alloc)
-	mesh_convay_ambo(mesh, temp_alloc)
-	mesh_convay_dual(mesh, temp_alloc)
-}
+		to_dissolve := make([dynamic]Half_Edge_Index, temp_alloc)
+		for v in verts {
+			iter_v := mesh_create_vertex_edge_iterator(mesh, v)
+			for e, i in mesh_vertex_outgoing_edge_iter(&iter_v) {
+				if e.vertex == centroid_vert {
+					append(&to_dissolve, i)
+					break
+				}
+			}
+		}
 
-mesh_convay_ortho :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_dual(mesh, temp_alloc)
-	mesh_convay_expand(mesh, temp_alloc)
-	mesh_convay_dual(mesh, temp_alloc)
-}
+		for e in to_dissolve {
+			mesh_dissolve_half_edge(mesh, mesh.edges[e].next)
+			mesh_dissolve_half_edge(mesh, e)
+		}
 
-mesh_convay_meta :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_dual(mesh, temp_alloc)
-	mesh_convay_bevel(mesh, temp_alloc)
-	mesh_convay_dual(mesh, temp_alloc)
-}
-
-mesh_convay_needle :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_dual(mesh, temp_alloc)
-	mesh_convay_kis(mesh, 0, temp_alloc)
-}
-
-mesh_convay_zip :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
-	mesh_convay_kis(mesh, 0, temp_alloc)
-	mesh_convay_dual(mesh, temp_alloc)
-}
-
-mesh_convay_operation :: proc(mesh: ^Mesh, operation: Convey_Operation, temp_alloc := context.temp_allocator, kis_height := f32(0)) {
-	switch operation {
-		case .Kis:		mesh_convay_kis(mesh, kis_height, temp_alloc)
-		case .Zip:		mesh_convay_zip(mesh, temp_alloc)
-		case .Ambo:		mesh_convay_ambo(mesh, temp_alloc)
-		case .Dual:		mesh_convay_dual(mesh, temp_alloc)
-		case .Snub:		mesh_convay_snub(mesh, temp_alloc)
-		case .Join:		mesh_convay_join(mesh, temp_alloc)
-		case .Meta:		mesh_convay_meta(mesh, temp_alloc)
-		case .Gyro:		mesh_convay_gyro(mesh, temp_alloc)
-		case .Ortho:	mesh_convay_ortho(mesh, temp_alloc)
-		case .Bevel:	mesh_convay_bevel(mesh, temp_alloc)
-		case .Needle:	mesh_convay_needle(mesh, temp_alloc)
-		case .Expand:	mesh_convay_expand(mesh, temp_alloc)
-		case .Truncate:	mesh_convay_truncate(mesh, temp_alloc)
+		delete(to_dissolve)
 	}
 }
 
+mesh_convay_classical_alternation :: proc(mesh: ^Mesh, temp_alloc := context.temp_allocator) {
+	lookup := make(map[Vertex_Index]bool, temp_alloc)
+	queue := make([dynamic]Vertex_Index, temp_alloc)
+
+	append(&queue, mesh.active_verts[0])
+	lookup[queue[0]] = false
+
+	for len(queue) > 0 {
+		v := pop_front(&queue)
+
+		iter := mesh_create_vertex_edge_iterator(mesh, v)
+		for e in mesh_vertex_outgoing_edge_iter(&iter) {
+			u := e.vertex
+			if u not_in lookup {
+				lookup[u] = !lookup[v]
+				append(&queue, u)
+			} else if lookup[u] == lookup[v] {
+				log.warnf("Cannot alternate a polyhedron with non-even faces")
+				return
+			}
+		}
+	}
+
+	for k, v in lookup {
+		if v == true {
+			mesh_dissolve_vertex_face_split(mesh, k, temp_alloc)
+		}
+	}
+
+}
+
+mesh_convay_classical_snub :: proc(mesh: ^Mesh, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), temp_alloc := context.temp_allocator) {
+	mesh_convay_ambo(mesh, ambo_factor, temp_alloc)
+	mesh_convay_truncate(mesh, truncate_factor, temp_alloc)
+	mesh_convay_classical_alternation(mesh, temp_alloc)
+}
+
+mesh_convay_classical_gyro :: proc(mesh: ^Mesh, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), temp_alloc := context.temp_allocator) {
+	mesh_convay_classical_snub(mesh, ambo_factor, truncate_factor, temp_alloc)
+	mesh_convay_dual(mesh, temp_alloc)
+}
+
+mesh_convay_bevel :: proc(mesh: ^Mesh, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), temp_alloc := context.temp_allocator) {
+	mesh_convay_ambo(mesh, ambo_factor, temp_alloc)
+	mesh_convay_truncate(mesh, truncate_factor, temp_alloc)
+}
+
+mesh_convay_expand :: proc(mesh: ^Mesh, factor := f32(0.5), temp_alloc := context.temp_allocator) {
+	mesh_convay_ambo(mesh, factor, temp_alloc)
+	mesh_convay_ambo(mesh, factor, temp_alloc)
+}
+
+mesh_convay_join :: proc(mesh: ^Mesh, factor := f32(0.5), temp_alloc := context.temp_allocator) {
+	mesh_convay_dual(mesh, temp_alloc)
+	mesh_convay_ambo(mesh, factor, temp_alloc)
+	mesh_convay_dual(mesh, temp_alloc)
+}
+
+mesh_convay_ortho :: proc(mesh: ^Mesh, factor := f32(0.5), temp_alloc := context.temp_allocator) {
+	mesh_convay_dual(mesh, temp_alloc)
+	mesh_convay_expand(mesh, factor, temp_alloc)
+	mesh_convay_dual(mesh, temp_alloc)
+}
+
+mesh_convay_meta :: proc(mesh: ^Mesh, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), temp_alloc := context.temp_allocator) {
+	mesh_convay_dual(mesh, temp_alloc)
+	mesh_convay_bevel(mesh, ambo_factor, truncate_factor, temp_alloc)
+	mesh_convay_dual(mesh, temp_alloc)
+}
+
+mesh_convay_needle :: proc(mesh: ^Mesh, height := f32(0.5), temp_alloc := context.temp_allocator) {
+	mesh_convay_dual(mesh, temp_alloc)
+	mesh_convay_kis(mesh, height, temp_alloc)
+}
+
+mesh_convay_zip :: proc(mesh: ^Mesh, height := f32(0.5), temp_alloc := context.temp_allocator) {
+	mesh_convay_kis(mesh, height, temp_alloc)
+	mesh_convay_dual(mesh, temp_alloc)
+}
+
+mesh_convay_operation :: proc(mesh: ^Mesh, operation: Convay_Operation, temp_alloc := context.temp_allocator, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), gyro_height := f32(0.5), kis_height := f32(0.5)) {
+	switch operation {
+		case .Kis:						mesh_convay_kis(mesh, kis_height, temp_alloc)
+		case .Zip:						mesh_convay_zip(mesh, kis_height, temp_alloc)
+		case .Ambo:						mesh_convay_ambo(mesh, ambo_factor, temp_alloc)
+		case .Dual:						mesh_convay_dual(mesh, temp_alloc)
+		case .Snub:						mesh_convay_snub(mesh, truncate_factor, gyro_height, kis_height, temp_alloc)
+		case .Join:						mesh_convay_join(mesh, ambo_factor, temp_alloc)
+		case .Meta:						mesh_convay_meta(mesh, ambo_factor, truncate_factor, temp_alloc)
+		case .Gyro:						mesh_convay_gyro(mesh, truncate_factor, gyro_height, temp_alloc)
+		case .Ortho:					mesh_convay_ortho(mesh, ambo_factor, temp_alloc)
+		case .Bevel:					mesh_convay_bevel(mesh, ambo_factor, truncate_factor, temp_alloc)
+		case .Needle:					mesh_convay_needle(mesh, kis_height, temp_alloc)
+		case .Expand:					mesh_convay_expand(mesh, ambo_factor, temp_alloc)
+		case .Truncate:					mesh_convay_truncate(mesh, truncate_factor, temp_alloc)
+		case .Classical_Snub:			mesh_convay_classical_snub(mesh, ambo_factor, truncate_factor, temp_alloc)
+		case .Classical_Gyro:			mesh_convay_classical_gyro(mesh, ambo_factor, truncate_factor, temp_alloc)
+		case .Classical_Alternation:	mesh_convay_classical_alternation(mesh, temp_alloc)
+	}
+}
 
 // Polygon generation
 mesh_generate_tetrahedron :: proc(allocator := context.allocator) -> Mesh {
@@ -1518,80 +1597,97 @@ mesh_generate_all_platonic_solids :: proc(allocator := context.allocator) -> [Pl
 
 mesh_generate_truncated_tetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_tetrahedron(allocator)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_cuboctahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_ambo(&mesh, temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_cube :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_octahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_octahedron(allocator)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_rhombicuboctahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_ambo(&mesh, temp_alloc)
-	mesh_convay_ambo(&mesh, temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_cuboctahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_ambo(&mesh, temp_alloc)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_snub_cube :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
-	return {}
+	mesh := mesh_generate_cube(allocator)
+	mesh_convay_classical_snub(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
+	return mesh
 }
 
 mesh_generate_icosidodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
-	mesh_convay_ambo(&mesh, temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_icosahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_icosahedron(allocator)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_rhombicosidodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
-	mesh_convay_ambo(&mesh, temp_alloc)
-	mesh_convay_ambo(&mesh, temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_icosidodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
-	mesh_convay_ambo(&mesh, temp_alloc)
-	mesh_convay_truncate(&mesh, temp_alloc)
+	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
+	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_snub_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
-	return {}
+	mesh := mesh_generate_dodecahedron(allocator)
+	mesh_convay_snub(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
+	return mesh
 }
 
 mesh_generate_archimedean_solid :: proc (solid : Archimedean_Solid, allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
@@ -1624,75 +1720,92 @@ mesh_generate_all_archimedean_solids :: proc(allocator := context.allocator, tem
 mesh_generate_triakis_tetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_tetrahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TRI_TETRAHEDRON_KIS_HEIGHT, temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_rhombic_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_join(&mesh, temp_alloc)
+	mesh_convay_join(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_triakis_octahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_octahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TRI_OCTAHEDRON_KIS_HEIGHT, temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_tetrakis_hexahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TETRA_HEXAHEDRON_KIS_HEIGHT, temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_deltoidal_icositetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_ortho(&mesh, temp_alloc)
+	mesh_convay_ortho(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_disdyakis_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
-	mesh_convay_meta(&mesh, temp_alloc)
+	mesh_convay_meta(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_pentagonal_icositetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
-	return {} // gyro of cube
+	mesh := mesh_generate_cube(allocator)
+	mesh_convay_classical_gyro(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
+	return mesh
 }
 
 mesh_generate_rhombic_triacontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_join(&mesh)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_triakis_icosahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_icosahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TRI_ICOSAHEDRON_KIS_HEIGHT, temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_pentakis_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_PENTA_DODECAHEDRON_KIS_HEIGHT, temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_deltoidal_hexecontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
-	mesh_convay_ortho(&mesh, temp_alloc)
+	mesh_convay_ortho(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_disdyakis_triacontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
-	mesh_convay_meta(&mesh, temp_alloc)
+	mesh_convay_meta(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
 	return mesh
 }
 
 mesh_generate_pentagonal_hexecontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
-	return {} // gyro of dodecahedron
+	mesh := mesh_generate_dodecahedron(allocator)
+	mesh_convay_classical_gyro(&mesh, temp_alloc = temp_alloc)
+	mesh_normalize(&mesh)
+	return mesh
 }
 
 mesh_generate_catalan_solid :: proc(solid : Catalan_Solid, allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
