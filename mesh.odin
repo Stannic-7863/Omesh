@@ -72,6 +72,7 @@ Triangle_Emitter_Iterator :: struct {
 	face:			Face_Index,
 	edge:			Half_Edge_Index,
 	start:			Half_Edge_Index,
+	normal:			Vec3f32,
 }
 
 Platonic_Solid :: enum {
@@ -436,25 +437,28 @@ mesh_vertex_outgoing_edge_iter :: proc(iter: ^Vertex_Edge_Iterator) -> (^Half_Ed
 
 mesh_create_triangle_emitter_iter :: proc(mesh: ^Mesh) -> Triangle_Emitter_Iterator {
 	face := mesh.faces[mesh.active_faces[0]]
+	normal := mesh_calculate_face_normal(mesh, mesh.active_faces[0])
 	return {
 		mesh = mesh,
 		face = mesh.active_faces[0],
 		start = face.edge,
-		edge = mesh.edges[face.edge].next
+		edge = mesh.edges[face.edge].next,
+		normal = normal
 	}
 }
 
-mesh_triangle_emitter_indexed_flat_iter :: proc(iter: ^Triangle_Emitter_Iterator) -> (count: i32, positions: [3]Vec3f32, indices: [3]i32, ok: bool) {
+mesh_triangle_emitter_indexed_flat_iter :: proc(iter: ^Triangle_Emitter_Iterator) -> (count: i32, positions: [3]Vec3f32, normal: Vec3f32, indices: [3]i32, ok: bool) {
 	if iter.mesh.edges[iter.edge].next == iter.start { // loop till < n-1
 		if iter.face_step < i32(len(iter.mesh.active_faces) - 1) {
 			iter.walk_step = 0
 			iter.face_step += 1
 			iter.face = iter.mesh.active_faces[iter.face_step]
+			iter.normal = mesh_calculate_face_normal(iter.mesh, iter.face)
 			iter.start = iter.mesh.faces[iter.face].edge // 0
 			iter.edge = iter.mesh.edges[iter.start].next // n
 			iter.vertex_base = iter.vertex_step
 		} else {
-			return 0, 0, 0, false
+			return 0, 0, 0, 0, false
 		}
 	}
 
@@ -468,14 +472,14 @@ mesh_triangle_emitter_indexed_flat_iter :: proc(iter: ^Triangle_Emitter_Iterator
 		iter.vertex_step += 3
 		iter.walk_step += 1
 		iter.edge = edge.next
-		return 3, {first.position, n.position, n_next.position}, {iter.vertex_base, iter.vertex_step - 2, iter.vertex_step - 1}, true
+		return 3, {first.position, n.position, n_next.position}, iter.normal, {iter.vertex_base, iter.vertex_step - 2, iter.vertex_step - 1}, true
 	}
 
 	iter.walk_step += 1
 	iter.vertex_step += 1
 	iter.edge = edge.next
 
-	return 1, {n_next.position, 0, 0}, {iter.vertex_base, iter.vertex_step - 2, iter.vertex_step - 1}, true
+	return 1, {n_next.position, 0, 0}, iter.normal, {iter.vertex_base, iter.vertex_step - 2, iter.vertex_step - 1}, true
 }
 
 mesh_alloc_face :: proc(mesh: ^Mesh, face: Face) -> Face_Index {
@@ -1424,6 +1428,12 @@ mesh_convay_operation :: proc(mesh: ^Mesh, operation: Convay_Operation, temp_all
 		case .Classical_Snub:			mesh_convay_classical_snub(mesh, ambo_factor, truncate_factor, temp_alloc)
 		case .Classical_Gyro:			mesh_convay_classical_gyro(mesh, ambo_factor, truncate_factor, temp_alloc)
 		case .Classical_Alternation:	mesh_convay_classical_alternation(mesh, temp_alloc)
+	}
+}
+
+mesh_convay_operations :: proc(mesh: ^Mesh, operations: ..Convay_Operation, temp_alloc := context.temp_allocator, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), gyro_height := f32(0.5), kis_height := f32(0.5)) {
+	for operation in operations {
+		mesh_convay_operation(mesh, operation, temp_alloc, ambo_factor, truncate_factor, gyro_height, kis_height)
 	}
 }
 

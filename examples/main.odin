@@ -42,7 +42,7 @@ main :: proc() {
 	indices := make([dynamic]i32)
 
 	emitter := m.mesh_create_triangle_emitter_iter(&platonic_solids[.Cube])
-	for c, p, i in m.mesh_triangle_emitter_indexed_flat_iter(&emitter) {
+	for c, p, n, i in m.mesh_triangle_emitter_indexed_flat_iter(&emitter) {
 		p := p
 		i := i
 		append(&positions, ..p[:c])
