@@ -351,6 +351,8 @@ mesh_get_edge_target_ptr_safe :: proc (mesh: Mesh, index: Half_Edge_Index) -> (v
 	return mesh_get_vertex_ptr_safe(mesh, edge.vertex)
 }
 
+// TODO : Use the above procedures to make code more readable in certain places
+
 mesh_create_face_edge_iterator :: proc(mesh: ^Mesh, face: Face_Index) -> Face_Edge_Iterator {
 	return {
 		current = mesh.faces[face].edge,
@@ -475,7 +477,7 @@ mesh_free_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) {
 	append(&mesh.free_edges, edge)
 	for i, j in mesh.active_edges {
 		if i == edge {
-			unordered_remove(&mesh.active_edges, j)
+			ordered_remove(&mesh.active_edges, j)
 			return
 		}
 	}
@@ -486,7 +488,7 @@ mesh_free_vertex :: proc(mesh: ^Mesh, vertex: Vertex_Index) {
 	append(&mesh.free_verts, vertex)
 	for i, j in mesh.active_verts {
 		if i == vertex {
-			unordered_remove(&mesh.active_verts, j)
+			ordered_remove(&mesh.active_verts, j)
 			return
 		}
 	}
@@ -497,24 +499,29 @@ mesh_free_face :: proc(mesh: ^Mesh, face: Face_Index) {
 	append(&mesh.free_faces, face)
 	for i, j in mesh.active_faces {
 		if i == face {
-			unordered_remove(&mesh.active_faces, j)
+			ordered_remove(&mesh.active_faces, j)
 			return
 		}
 	}
 }
 
+
 mesh_dissolve_vertex_face_split :: proc(mesh: ^Mesh, vertex: Vertex_Index, temp_alloc := context.temp_allocator) -> (new_face: Face_Index) {
+	// TODO: Should the indices be validated for being valid in the free list? or should the user be trusted?
+	// Blender provides an option to dissolve vertex without face splits. TODO: Figure that out
 	if vertex < 0 { return -1 }
 
 	iter := mesh_create_vertex_edge_iterator(mesh, vertex)
 
 	for e, i in mesh_vertex_outgoing_edge_iter(&iter) {
         if e.face == -1 {
+         	// TODO: Add a way to dissolve boundary vertex?
             log.error("Cannot dissolve boundary vertex")
             return -1
         }
 	}
 
+	// If only two edges are incidence on the vertex, then delete the vertex and one pair of edges and reconnect the remaining edges
 	if iter.step < 3 {
 		v := mesh.verts[vertex]
 
@@ -526,7 +533,7 @@ mesh_dissolve_vertex_face_split :: proc(mesh: ^Mesh, vertex: Vertex_Index, temp_
 		incomming_op := &mesh.edges[incomming.opposite]
 		outgoing_op := &mesh.edges[outgoing.opposite]
 
-		s, t := incomming_op.vertex, outgoing_op.vertex
+		source, target := incomming_op.vertex, outgoing_op.vertex
 
 		outgoing.prev = incomming.prev
 		outgoing_op.next = incomming_op.next
@@ -543,15 +550,17 @@ mesh_dissolve_vertex_face_split :: proc(mesh: ^Mesh, vertex: Vertex_Index, temp_
 		mesh_free_vertex(mesh, vertex)
 		mesh_free_half_edge(mesh, incomming.opposite)
 		mesh_free_half_edge(mesh, incomming_index)
-		delete_key(&mesh.lookup, Lookup_Pair{s, vertex})
-		delete_key(&mesh.lookup, Lookup_Pair{vertex, s})
-		delete_key(&mesh.lookup, Lookup_Pair{t, vertex})
-		delete_key(&mesh.lookup, Lookup_Pair{vertex, t})
+		delete_key(&mesh.lookup, Lookup_Pair{source, vertex})
+		delete_key(&mesh.lookup, Lookup_Pair{vertex, source})
+		delete_key(&mesh.lookup, Lookup_Pair{target, vertex})
+		delete_key(&mesh.lookup, Lookup_Pair{vertex, target})
 
-		mesh.lookup[Lookup_Pair{s, t}] = outgoing_index
-		mesh.lookup[Lookup_Pair{t, s}] = outgoing.opposite
+		mesh.lookup[Lookup_Pair{source, target}] = outgoing_index
+		mesh.lookup[Lookup_Pair{target, source}] = outgoing.opposite
 		return
 	}
+
+	// Collect all the outgoing edges from the vertex. Split the face between target vertices of consecutive outgoing edges to get a rim.
 
 	outgoing := make([dynamic]Half_Edge_Index, temp_alloc)
 
@@ -568,24 +577,9 @@ mesh_dissolve_vertex_face_split :: proc(mesh: ^Mesh, vertex: Vertex_Index, temp_
 		u := outgoing[i]
 		v := outgoing[(i + 1) % len(outgoing)]
 
+		if mesh.edges[u].next == v || mesh.edges[v].next == u { continue } // Skip adjacent vertices. This split function handles that but this is here to avoid logging the warnings
+
 		mesh_split_face(mesh, mesh.edges[v].face, mesh.edges[u].vertex, mesh.edges[v].vertex)
-	}
-
-	face := mesh_dissolve_vertex_rim(mesh, vertex)
-
-	return face
-}
-
-mesh_dissolve_vertex_rim :: proc(mesh: ^Mesh, vertex: Vertex_Index) -> (new_face: Face_Index) {
-    if vertex < 0 { return -1 }
-
-	iter := mesh_create_vertex_edge_iterator(mesh, vertex)
-
-	for e, i in mesh_vertex_outgoing_edge_iter(&iter) {
-        if e.face == -1 {
-            log.error("Cannot dissolve boundary vertex")
-            return -1
-        }
 	}
 
 	face_edge := mesh.edges[mesh.edges[iter.start].opposite].next
@@ -626,20 +620,25 @@ mesh_dissolve_vertex_rim :: proc(mesh: ^Mesh, vertex: Vertex_Index) -> (new_face
 mesh_dissolve_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kept_face: Face_Index) {
 	if edge < 0 {return -1}
 
+	// Wire edge.incomming-edge to the edge.opposite.outgoing edge and vice versa
+	// Wire edge.outgoing-edge to the edge.opposite.incomming-edge and vice versa
+
+	// This is blender's edge dissolve with the "dissolve vertex" option unselected
+
 	e := &mesh.edges[edge]
 	e_op := &mesh.edges[e.opposite]
 
-	e_prev := e.prev
-	e_op_prev := e_op.prev
+	e_prev_index := e.prev
+	e_op_prev_index := e_op.prev
 
-	e_next := e.next
-	e_op_next := e_op.next
+	e_next_index := e.next
+	e_op_next_index := e_op.next
 
-	mesh.edges[e.next].prev = e_op_prev
-	mesh.edges[e.prev].next = e_op_next
+	mesh.edges[e.next].prev = e_op_prev_index
+	mesh.edges[e.prev].next = e_op_next_index
 
-	mesh.edges[e_op.next].prev = e_prev
-	mesh.edges[e_op.prev].next = e_next
+	mesh.edges[e_op.next].prev = e_prev_index
+	mesh.edges[e_op.prev].next = e_next_index
 
 	selected_edge_index := edge
 
@@ -682,16 +681,8 @@ mesh_dissolve_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kept_fac
 	return selected_edge.face
 }
 
-mesh_remove_face :: proc(mesh: ^Mesh, face: Face_Index) {
-	iter := mesh_create_face_edge_iterator(mesh, face)
-	for e in mesh_face_edge_forward_iter(&iter) {
-		e.face = -1
-	}
-
-	mesh_free_face(mesh, face)
-}
-
-mesh_merge_face :: proc(mesh: ^Mesh, face_a: Face_Index, face_b: Face_Index) -> (kept_face: Face_Index) {
+mesh_dissolve_faces :: proc(mesh: ^Mesh, face_a: Face_Index, face_b: Face_Index) -> (kept_face: Face_Index) {
+	// TODO: Make this take N-Faces instead of only two
 	if face_a < 0 || face_b < 0 {
 		return -1
 	}
@@ -708,6 +699,15 @@ mesh_merge_face :: proc(mesh: ^Mesh, face_a: Face_Index, face_b: Face_Index) -> 
 	}
 
 	return mesh_dissolve_half_edge(mesh, common_edge)
+}
+
+mesh_remove_face :: proc(mesh: ^Mesh, face: Face_Index) {
+	iter := mesh_create_face_edge_iterator(mesh, face)
+	for e in mesh_face_edge_forward_iter(&iter) {
+		e.face = -1
+	}
+
+	mesh_free_face(mesh, face)
 }
 
 mesh_add_vertices :: proc(mesh: ^Mesh, positions: ..Vec3f32) {
@@ -791,6 +791,7 @@ mesh_split_edges_all :: proc(mesh: ^Mesh, factor := f32(0.5), temp_alloc := cont
 }
 
 mesh_split_edges_twice_all :: proc(mesh: ^Mesh, factor := f32(2.0/3.0), temp_alloc := context.temp_allocator) {
+	// Todo : Make a split varient for creating N-splits
 	prev_edges := make([dynamic]Half_Edge_Index, len(mesh.active_edges), temp_alloc)
 	lookup := make(map[Half_Edge_Index]struct{}, len(mesh.active_edges), temp_alloc)
 	copy(prev_edges[:], mesh.active_edges[:])
