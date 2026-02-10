@@ -38,6 +38,10 @@ main :: proc() {
 
 	draw_debug := false
 
+	m.mesh_split_edges_twice_all(&platonic_solids[.Cube])
+
+	m.mesh_validate(platonic_solids[.Cube])
+
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(.E) { draw_debug = ~draw_debug }
 		if rl.IsKeyPressed(.U) { selected_type = .Tetrahedron }
@@ -86,6 +90,13 @@ main :: proc() {
 		{
 			t := rl.TextFormat("%v", selected_type)
 			rl.DrawText(t, rl.GetScreenWidth() / 2 - rl.MeasureText(t, 20) / 2, 10, 20, rl.WHITE)
+			t = cstring("")
+			switch v in selected_type {
+			case m.Catalan_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(catalan_solids[v].active_verts), len(catalan_solids[v].active_faces), len(catalan_solids[v].active_edges))
+			case m.Platonic_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(platonic_solids[v].active_verts), len(platonic_solids[v].active_faces), len(platonic_solids[v].active_edges))
+			case m.Archimedean_Solid: 	t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(archimedean_solids[v].active_verts), len(archimedean_solids[v].active_faces), len(archimedean_solids[v].active_edges))
+			}
+			rl.DrawText(t, rl.GetScreenWidth() / 2 - rl.MeasureText(t, 20) / 2, 40, 20, rl.WHITE)
 		}
 
 		{
@@ -159,7 +170,7 @@ draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 	for i in mesh.active_faces {
 		iter := m.mesh_create_face_edge_iterator(&mesh, i)
 		centroid := m.Vec3f32{}
-		for e, i in m.mesh_face_edge_iter(&iter) {
+		for e, i in m.mesh_face_edge_forward_iter(&iter) {
 			centroid += mesh.verts[e.vertex].position
 		}
 		centroid /= f32(iter.step)
