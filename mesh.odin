@@ -64,10 +64,14 @@ Vertex_Edge_Iterator :: struct {
 }
 
 Triangle_Emitter_Iterator :: struct {
-	indices: 	[3]i32,
-	positions: 	[3]Vec3f32,
-	mesh:		^Mesh,
-	count: 		i32, // how many positions are valid. because positions might be reused
+	mesh:			^Mesh,
+	walk_step:		i32,
+	vertex_step:	i32,
+	vertex_base:	i32,
+	face_step:  	i32,
+	face:			Face_Index,
+	edge:			Half_Edge_Index,
+	start:			Half_Edge_Index,
 }
 
 Platonic_Solid :: enum {
@@ -428,6 +432,50 @@ mesh_vertex_outgoing_edge_iter :: proc(iter: ^Vertex_Edge_Iterator) -> (^Half_Ed
 	iter.current = iter.mesh.edges[e.next].opposite
 
 	return e_r, prev, true
+}
+
+mesh_create_triangle_emitter_iter :: proc(mesh: ^Mesh) -> Triangle_Emitter_Iterator {
+	face := mesh.faces[mesh.active_faces[0]]
+	return {
+		mesh = mesh,
+		face = mesh.active_faces[0],
+		start = face.edge,
+		edge = mesh.edges[face.edge].next
+	}
+}
+
+mesh_triangle_emitter_indexed_flat_iter :: proc(iter: ^Triangle_Emitter_Iterator) -> (count: i32, positions: [3]Vec3f32, indices: [3]i32, ok: bool) {
+	if iter.mesh.edges[iter.edge].next == iter.start { // loop till < n-1
+		if iter.face_step < i32(len(iter.mesh.active_faces) - 1) {
+			iter.walk_step = 0
+			iter.face_step += 1
+			iter.face = iter.mesh.active_faces[iter.face_step]
+			iter.start = iter.mesh.faces[iter.face].edge // 0
+			iter.edge = iter.mesh.edges[iter.start].next // n
+			iter.vertex_base = iter.vertex_step
+		} else {
+			return 0, 0, 0, false
+		}
+	}
+
+	edge := iter.mesh.edges[iter.edge]
+
+	first := mesh_get_edge_target(iter.mesh^, iter.start) // 0
+	n := mesh_get_edge_target(iter.mesh^, iter.edge) // n
+	n_next := mesh_get_edge_target(iter.mesh^, edge.next) // n + 1
+
+	if iter.walk_step == 0 {
+		iter.vertex_step += 3
+		iter.walk_step += 1
+		iter.edge = edge.next
+		return 3, {first.position, n.position, n_next.position}, {iter.vertex_base, iter.vertex_step - 2, iter.vertex_step - 1}, true
+	}
+
+	iter.walk_step += 1
+	iter.vertex_step += 1
+	iter.edge = edge.next
+
+	return 1, {n_next.position, 0, 0}, {iter.vertex_base, iter.vertex_step - 2, iter.vertex_step - 1}, true
 }
 
 mesh_alloc_face :: proc(mesh: ^Mesh, face: Face) -> Face_Index {
@@ -1169,10 +1217,10 @@ mesh_calculate_face_normal :: proc(mesh: ^Mesh, face: Face_Index) -> Vec3f32 {
 	return linalg.normalize0(normal)
 }
 
-mesh_normalize :: proc(mesh: ^Mesh) {
+mesh_normalize_onto_sphere :: proc(mesh: ^Mesh) {
 	length := f32(0)
 	for v in mesh.active_verts {
-		length = max(0, linalg.length(mesh.verts[v].position))
+		length = max(length, linalg.length(mesh.verts[v].position))
 	}
 
 	for v in mesh.active_verts {
@@ -1226,8 +1274,8 @@ mesh_convay_ambo :: proc (mesh: ^Mesh, ambo_factor := f32(0.5), temp_alloc := co
 
 	mesh_split_edges_all(mesh, ambo_factor, temp_alloc)
 
-	for i in verts {
-		mesh_dissolve_vertex_face_split(mesh, i, temp_alloc)
+	for v in verts {
+		mesh_dissolve_vertex_face_split(mesh, v, temp_alloc)
 	}
 }
 
@@ -1384,7 +1432,7 @@ mesh_generate_tetrahedron :: proc(allocator := context.allocator) -> Mesh {
 	mesh := mesh_create(allocator)
 	mesh_add_vertices(&mesh, {1, 1, 1}, {-1, -1, 1}, {-1, 1, -1}, {1, -1, -1})
 	mesh_add_faces(&mesh, {0, 1, 2}, {0, 2, 3}, {0, 3, 1}, {1, 3, 2})
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1392,7 +1440,7 @@ mesh_generate_cube :: proc(allocator := context.allocator) -> Mesh {
 	mesh := mesh_create(allocator)
 	mesh_add_vertices(&mesh, {1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {1, -1, 1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, -1})
 	mesh_add_faces(&mesh, {3, 2, 1, 0}, {3, 0, 5, 4}, {4, 5, 6, 7}, {7, 6, 1, 2}, {6, 5, 0, 1}, {2, 3, 4, 7})
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1400,7 +1448,7 @@ mesh_generate_octahedron :: proc(allocator := context.allocator) -> Mesh {
 	mesh := mesh_create(allocator)
 	mesh_add_vertices(&mesh, { 1,  0,  0},{-1,  0,  0},{ 0,  1,  0},{ 0, -1,  0},{ 0,  0,  1},{ 0,  0, -1})
 	mesh_add_faces(&mesh,{0, 4, 2},{2, 4, 1},{1, 4, 3},{3, 4, 0},{2, 5, 0},{1, 5, 2},{3, 5, 1},{0, 5, 3})
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1418,7 +1466,7 @@ mesh_generate_icosahedron :: proc(allocator := context.allocator) -> Mesh {
 		{6, 2, 3}, {8, 6, 3}, {9, 8, 3}, {5, 9, 4},
 		{11, 4, 2}, {10, 2, 6}, {7, 6, 8}, {1, 8, 9}
 	)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1439,7 +1487,7 @@ mesh_generate_dodecahedron :: proc(allocator := context.allocator) -> Mesh {
         {5, 9, 1, 12, 14},   {5, 14, 4, 18, 19},  {5, 19, 7, 11, 9},
         {6, 10, 2, 13, 15},  {6, 15, 7, 19, 18},  {6, 18, 4, 8, 10},
     )
-    mesh_normalize(&mesh)
+    mesh_normalize_onto_sphere(&mesh)
     return mesh
 }
 
@@ -1465,28 +1513,28 @@ mesh_generate_all_platonic_solids :: proc(allocator := context.allocator) -> [Pl
 mesh_generate_truncated_tetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_tetrahedron(allocator)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_cuboctahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_cube :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_octahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_octahedron(allocator)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1494,7 +1542,7 @@ mesh_generate_rhombicuboctahedron :: proc(allocator := context.allocator, temp_a
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1502,35 +1550,35 @@ mesh_generate_truncated_cuboctahedron :: proc(allocator := context.allocator, te
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_snub_cube :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_classical_snub(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_icosidodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_truncated_icosahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_icosahedron(allocator)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1538,7 +1586,7 @@ mesh_generate_rhombicosidodecahedron :: proc(allocator := context.allocator, tem
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1546,14 +1594,14 @@ mesh_generate_truncated_icosidodecahedron :: proc(allocator := context.allocator
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_ambo(&mesh, temp_alloc = temp_alloc)
 	mesh_convay_truncate(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_snub_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_classical_snub(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
@@ -1587,91 +1635,91 @@ mesh_generate_all_archimedean_solids :: proc(allocator := context.allocator, tem
 mesh_generate_triakis_tetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_tetrahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TRI_TETRAHEDRON_KIS_HEIGHT, temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_rhombic_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_join(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_triakis_octahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_octahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TRI_OCTAHEDRON_KIS_HEIGHT, temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_tetrakis_hexahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TETRA_HEXAHEDRON_KIS_HEIGHT, temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_deltoidal_icositetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_ortho(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_disdyakis_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_meta(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_pentagonal_icositetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_cube(allocator)
 	mesh_convay_classical_gyro(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_rhombic_triacontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_join(&mesh)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_triakis_icosahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_icosahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_TRI_ICOSAHEDRON_KIS_HEIGHT, temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_pentakis_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_kis(&mesh, CATALAN_PENTA_DODECAHEDRON_KIS_HEIGHT, temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_deltoidal_hexecontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_ortho(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_disdyakis_triacontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_meta(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 
 mesh_generate_pentagonal_hexecontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> Mesh {
 	mesh := mesh_generate_dodecahedron(allocator)
 	mesh_convay_classical_gyro(&mesh, temp_alloc = temp_alloc)
-	mesh_normalize(&mesh)
+	mesh_normalize_onto_sphere(&mesh)
 	return mesh
 }
 

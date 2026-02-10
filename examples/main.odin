@@ -38,7 +38,18 @@ main :: proc() {
 
 	draw_debug := false
 
-	m.mesh_split_edges_twice_all(&platonic_solids[.Cube])
+	positions := make([dynamic]m.Vec3f32)
+	indices := make([dynamic]i32)
+
+	emitter := m.mesh_create_triangle_emitter_iter(&platonic_solids[.Cube])
+	for c, p, i in m.mesh_triangle_emitter_indexed_flat_iter(&emitter) {
+		p := p
+		i := i
+		append(&positions, ..p[:c])
+		append(&indices, ..i[:])
+	}
+
+	log.info(positions[:], indices[:])
 
 	m.mesh_validate(platonic_solids[.Cube])
 
