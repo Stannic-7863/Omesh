@@ -13,14 +13,15 @@ main :: proc() {
 
 	platonic_solids := m.mesh_generate_all_platonic_solids()
 	defer m.meshes_destroy(..slice.enumerated_array(&platonic_solids))
+	defer m.mesh_validate(platonic_solids[.Cube])
 
-	// archimedean_solids := [Archimedean_Solid]Mesh{}
-	archimedean_solids := m.mesh_generate_all_archimedean_solids()
-	defer m.meshes_destroy(..slice.enumerated_array(&archimedean_solids))
+	archimedean_solids := [m.Archimedean_Solid]m.Mesh{}
+	// archimedean_solids := m.mesh_generate_all_archimedean_solids()
+	// defer m.meshes_destroy(..slice.enumerated_array(&archimedean_solids))
 
-	// catalan_solids := [Catalan_Solid]Mesh{}
-	catalan_solids := m.mesh_generate_all_catalan_solids()
-	defer m.meshes_destroy(..slice.enumerated_array(&catalan_solids))
+	catalan_solids := [m.Catalan_Solid]m.Mesh{}
+	// catalan_solids := m.mesh_generate_all_catalan_solids()
+	// defer m.meshes_destroy(..slice.enumerated_array(&catalan_solids))
 
 	selected_type : union #no_nil {m.Platonic_Solid, m.Archimedean_Solid, m.Catalan_Solid} = .Tetrahedron
 
@@ -41,17 +42,6 @@ main :: proc() {
 	positions := make([dynamic]m.Vec3f32)
 	indices := make([dynamic]i32)
 
-	emitter := m.mesh_create_triangle_emitter_iter(&platonic_solids[.Cube])
-	for c, p, n, i in m.mesh_triangle_emitter_indexed_flat_iter(&emitter) {
-		p := p
-		i := i
-		append(&positions, ..p[:c])
-		append(&indices, ..i[:])
-	}
-
-	log.info(positions[:], indices[:])
-
-	m.mesh_validate(platonic_solids[.Cube])
 
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(.E) { draw_debug = ~draw_debug }
@@ -61,7 +51,7 @@ main :: proc() {
 
 		if rl.IsKeyPressed(.LEFT) {
 			switch &v in selected_type {
-			case m.Platonic_Solid:	v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
+			case m.Platonic_Solid:		v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
 			case m.Archimedean_Solid:	v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
 			case m.Catalan_Solid:		v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
 			}
@@ -69,9 +59,17 @@ main :: proc() {
 
 		if rl.IsKeyPressed(.RIGHT) {
 			switch &v in selected_type {
-			case m.Platonic_Solid:	v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
+			case m.Platonic_Solid:		v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
 			case m.Archimedean_Solid:	v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
 			case m.Catalan_Solid:		v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
+			}
+		}
+
+		if rl.IsKeyPressed(.V) {
+			switch &v in selected_type {
+			case m.Platonic_Solid:		m.mesh_validate(platonic_solids[v])
+			case m.Archimedean_Solid:  	m.mesh_validate(archimedean_solids[v])
+			case m.Catalan_Solid:		m.mesh_validate(catalan_solids[v])
 			}
 		}
 
@@ -103,9 +101,9 @@ main :: proc() {
 			rl.DrawText(t, rl.GetScreenWidth() / 2 - rl.MeasureText(t, 20) / 2, 10, 20, rl.WHITE)
 			t = cstring("")
 			switch v in selected_type {
-			case m.Catalan_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(catalan_solids[v].active_verts), len(catalan_solids[v].active_faces), len(catalan_solids[v].active_edges))
-			case m.Platonic_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(platonic_solids[v].active_verts), len(platonic_solids[v].active_faces), len(platonic_solids[v].active_edges))
-			case m.Archimedean_Solid: 	t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(archimedean_solids[v].active_verts), len(archimedean_solids[v].active_faces), len(archimedean_solids[v].active_edges))
+			case m.Catalan_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(catalan_solids[v].verts.active), len(catalan_solids[v].faces.active), len(catalan_solids[v].edges.active))
+			case m.Platonic_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(platonic_solids[v].verts.active), len(platonic_solids[v].faces.active), len(platonic_solids[v].edges.active))
+			case m.Archimedean_Solid: 	t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(archimedean_solids[v].verts.active), len(archimedean_solids[v].faces.active), len(archimedean_solids[v].edges.active))
 			}
 			rl.DrawText(t, rl.GetScreenWidth() / 2 - rl.MeasureText(t, 20) / 2, 40, 20, rl.WHITE)
 		}
@@ -149,10 +147,10 @@ draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 
 	rl.BeginMode3D(camera)
 
-	for i in mesh.active_edges {
-		e := mesh.edges[i]
-		target_v := mesh.verts[e.vertex].position
-		source_v := mesh.verts[mesh.edges[e.opposite].vertex].position
+	for i in mesh.edges.active {
+		e := m.mesh_get_edge_unsafe(mesh, i)
+		target_v := m.mesh_get_vertex_unsafe(mesh, e.vertex).position
+		source_v := m.mesh_get_vertex_unsafe(mesh, m.mesh_get_edge_opposite_unsafe(mesh, i).vertex).position
 
 		dir := rl.Vector3Normalize(target_v - source_v)
 
@@ -178,29 +176,30 @@ draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 	rl.EndMode3D()
 
 	if !draw_debug { return }
-	for i in mesh.active_faces {
+	for i in mesh.faces.active {
 		iter := m.mesh_create_face_edge_iterator(&mesh, i)
 		centroid := m.Vec3f32{}
 		for e, i in m.mesh_face_edge_forward_iter(&iter) {
-			centroid += mesh.verts[e.vertex].position
+			centroid += m.mesh_get_vertex_unsafe(mesh, e.vertex).position
 		}
 		centroid /= f32(iter.step)
+		face := m.mesh_get_face_unsafe(mesh, i)
 
-		rl.DrawTextEx(rl.GetFontDefault(), rl.TextFormat("F: %i, E: %i", i, mesh.faces[i].edge), rl.GetWorldToScreen(centroid, camera), 20, 1, rl.YELLOW)
+		rl.DrawTextEx(rl.GetFontDefault(), rl.TextFormat("F: %i, E: %i", i, face.edge), rl.GetWorldToScreen(centroid, camera), 20, 1, rl.YELLOW)
 	}
 
-	for i in mesh.active_edges {
-		e := mesh.edges[i]
-		target, source := e.vertex, mesh.edges[e.opposite].vertex
-		s, t := mesh.verts[source], mesh.verts[target]
+	for i in mesh.edges.active {
+		e := m.mesh_get_edge_unsafe(mesh, i)
+		target, source := e.vertex, m.mesh_get_edge_opposite_unsafe(mesh, i).vertex
+		s, t := m.mesh_get_vertex_unsafe(mesh, target), m.mesh_get_vertex_unsafe(mesh, source)
 		dir := linalg.normalize0(s.position - t.position)
 		col_v := 255 * ((t.position + 3) / 4)
 		col := rl.Color{u8(col_v.r), u8(col_v.g), u8(col_v.b), 255}
 		rl.DrawTextEx(rl.GetFontDefault(), rl.TextFormat("E: %i N: %i P: %i V: %i", i, e.next, e.prev, e.vertex), rl.GetWorldToScreen(((s.position + t.position + dir / 2) / 2), camera), 20, 2, col)
 	}
 
-	for i in mesh.active_verts {
-		v := m.mesh_get_vertex(mesh, i)
+	for i in mesh.verts.active {
+		v := m.mesh_get_vertex_unsafe(mesh, i)
 		col_v := 255 * ((v.position + 3) / 4)
 		col := rl.Color{u8(col_v.r), u8(col_v.g), u8(col_v.b), 255}
 		rl.BeginMode3D(camera)
