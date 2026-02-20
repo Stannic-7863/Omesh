@@ -2,15 +2,15 @@ package mesh
 
 import "core:log"
 
-mesh_validate :: proc(mesh: Mesh, caller_expression := #caller_expression) -> (invalid: bool) {
-	log.info("--- Validation :", caller_expression)
-	base_ok := mesh_validate_base_constraints(mesh)
-	indices_ok := mesh_validate_indicies(mesh)
-	opposites_ok := mesh_validate_opposites(mesh)
-	link_ok := mesh_validate_links(mesh)
-	face_loops_ok := mesh_validate_face_loops(mesh)
-	vertex_references_ok := mesh_validate_vertex_references(mesh)
-	edge_uniqueness_ok := mesh_validate_global_uniqueness(mesh)
+validate :: proc(mesh: Mesh, temp_alloc := context.temp_allocator, caller_expression := #caller_expression) -> (invalid: bool) {
+	log.info("--- Validation : ", caller_expression)
+	base_ok := validate_base_constraints(mesh)
+	indices_ok := validate_indicies(mesh)
+	opposites_ok := validate_opposites(mesh)
+	link_ok := validate_links(mesh)
+	face_loops_ok := validate_face_loops(mesh, temp_alloc)
+	vertex_references_ok := validate_vertex_references(mesh)
+	edge_uniqueness_ok := validate_global_uniqueness(mesh, temp_alloc)
 
 	if !base_ok {log.info("Base constraint test passed")} else {log.errorf("Base constraint test failed")}
 	if !link_ok {log.info("Edge link test passed")} else {log.error("Edge link test failed")}
@@ -30,21 +30,21 @@ mesh_validate :: proc(mesh: Mesh, caller_expression := #caller_expression) -> (i
 	)
 }
 
-mesh_validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
+validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
 	for i in mesh.edges.active {
-		next, ok_next := mesh_get_edge_next(mesh, i)
-		prev, ok_prev := mesh_get_edge_prev(mesh, i)
-		opposite, ok_opposite := mesh_get_edge_opposite(mesh, i)
+		next, ok_next := get_edge_next(mesh, i)
+		prev, ok_prev := get_edge_prev(mesh, i)
+		opposite, ok_opposite := get_edge_opposite(mesh, i)
 
 		if !(ok_next || ok_prev || ok_opposite) {
-			log.errorf("Invalid Next: %v, Invalid Prev: %v, Invalid Opposite: %v. Edge: %v", !ok_next, !ok_prev, !ok_opposite, mesh_get_edge_unsafe(mesh, i))
+			log.errorf("Invalid Next: %v, Invalid Prev: %v, Invalid Opposite: %v. Edge: %v", !ok_next, !ok_prev, !ok_opposite, get_edge_unsafe(mesh, i))
 			return true
 		}
 	}
 
 	for i in mesh.faces.active {
-		face := mesh_get_face_unsafe(mesh, i)
-		face_edge, ok := mesh_get_edge(mesh, face.edge)
+		face := get_face_unsafe(mesh, i)
+		face_edge, ok := get_edge(mesh, face.edge)
 
 		if !ok {
 			log.errorf("Face does not reference an existing edge. Face: %v", face)
@@ -53,8 +53,8 @@ mesh_validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
 	}
 
 	for i in mesh.verts.active {
-		vert := mesh_get_vertex_unsafe(mesh, i)
-		vert_edge, ok := mesh_get_edge(mesh, vert.edge)
+		vert := get_vertex_unsafe(mesh, i)
+		vert_edge, ok := get_edge(mesh, vert.edge)
 
 		if !ok {
 			log.errorf("Vertex does not reference an existing edge. Vertex Index: %i, Vertex: %v", i, vert)
@@ -65,10 +65,10 @@ mesh_validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
 	return false
 }
 
-mesh_validate_opposites :: proc(mesh: Mesh) -> (invalid: bool) {
+validate_opposites :: proc(mesh: Mesh) -> (invalid: bool) {
 	for i in mesh.edges.active {
-		e := mesh_get_edge_unsafe(mesh, i)
-		e_op := mesh_get_edge_unsafe(mesh, e.opposite)
+		e := get_edge_unsafe(mesh, i)
+		e_op := get_edge_unsafe(mesh, e.opposite)
 
 		if e_op.face == e.face && e.face != -1 && e_op.face != -1 { // Opposites must belong to differnet/unique faces. Except boundaries
 			log.errorf("Half-edge opposite must belong to a different face. Edge's Face : %i, Opposite's Face : %i", e.face, e_op.face)
@@ -84,9 +84,9 @@ mesh_validate_opposites :: proc(mesh: Mesh) -> (invalid: bool) {
 	return false
 }
 
-mesh_validate_indicies :: proc(mesh: Mesh) -> (invalid: bool) {
+validate_indicies :: proc(mesh: Mesh) -> (invalid: bool) {
 	for i in mesh.edges.active {
-		e := mesh_get_edge_unsafe(mesh, i)
+		e := get_edge_unsafe(mesh, i)
 		if e.opposite < 0 || int(e.opposite) >= len(mesh.edges.all) {
 			log.errorf("Invalide opposite half-edge index. Got %i, expected between [0-%i)", e.opposite, len(mesh.edges.all))
 			return true
@@ -114,12 +114,12 @@ mesh_validate_indicies :: proc(mesh: Mesh) -> (invalid: bool) {
 	return false
 }
 
-mesh_validate_links :: proc(mesh: Mesh) -> (invalid: bool) {
+validate_links :: proc(mesh: Mesh) -> (invalid: bool) {
 	for i in mesh.edges.active {
-		e := mesh_get_edge_unsafe(mesh, i)
+		e := get_edge_unsafe(mesh, i)
 
-		next := mesh_get_edge_next_unsafe(mesh, i)
-		prev := mesh_get_edge_prev_unsafe(mesh, i)
+		next := get_edge_next_unsafe(mesh, i)
+		prev := get_edge_prev_unsafe(mesh, i)
 
 		if next.prev != i {
 			log.errorf("Linkage Invariance Violated: edges[%i].next.prev is %i, expected %i", i, next.prev, i)
@@ -130,7 +130,7 @@ mesh_validate_links :: proc(mesh: Mesh) -> (invalid: bool) {
 			log.errorf("Linkage Invariance Violated: edges[%i].prev.next is %i, expected %i", i, prev.next, i)
 			return true
 		}
-		e_op := mesh_get_edge_unsafe(mesh, e.opposite)
+		e_op := get_edge_unsafe(mesh, e.opposite)
 		if e_op.vertex != prev.vertex {
 			log.errorf( "current.source == prev.target property violated. Current, Prev : %v, %v", e, prev)
 			return true
@@ -139,7 +139,7 @@ mesh_validate_links :: proc(mesh: Mesh) -> (invalid: bool) {
 	return false
 }
 
-mesh_validate_face_loops :: proc( mesh: Mesh, allocator := context.temp_allocator, ) -> ( invalid: bool, ) {
+validate_face_loops :: proc( mesh: Mesh, allocator := context.temp_allocator) -> ( invalid: bool, ) {
 	lookup := make(map[Half_Edge_Index]struct{}, allocator)
 	defer delete(lookup)
 
@@ -149,8 +149,8 @@ mesh_validate_face_loops :: proc( mesh: Mesh, allocator := context.temp_allocato
 		start := f.edge
 
 
-		if mesh_get_edge_unsafe(mesh, start).face != i { 	// The edge must point/reference current face
-			log.errorf("Half-edge doesn't point to current face being walked. Face Index : %i, Face : %v, Edge : %v", i, f, mesh_get_edge_unsafe(mesh, start))
+		if get_edge_unsafe(mesh, start).face != i { 	// The edge must point/reference current face
+			log.errorf("Half-edge doesn't point to current face being walked. Face Index : %i, Face : %v, Edge : %v", i, f, get_edge_unsafe(mesh, start))
 			return true
 		}
 
@@ -161,7 +161,7 @@ mesh_validate_face_loops :: proc( mesh: Mesh, allocator := context.temp_allocato
 
 		for {
 			prev := curr
-			c := mesh_get_edge_unsafe(mesh, curr)
+			c := get_edge_unsafe(mesh, curr)
 			curr = c.next
 
 			if c.face != i {
@@ -193,10 +193,10 @@ mesh_validate_face_loops :: proc( mesh: Mesh, allocator := context.temp_allocato
 	return false
 }
 
-mesh_validate_vertex_references :: proc(mesh: Mesh) -> (invalid: bool) {
+validate_vertex_references :: proc(mesh: Mesh) -> (invalid: bool) {
 	for i in mesh.verts.active {
 		v := mesh.verts.all[i]
-		c := mesh_get_edge_unsafe(mesh, v.edge)
+		c := get_edge_unsafe(mesh, v.edge)
 		if c.vertex != i {
 			log.errorf("Half-edge vertex references does not have the vertex as its target. Vertex Index : %i, Vertex : %v, Edge : %v", i, v, c)
 			return true
@@ -205,7 +205,7 @@ mesh_validate_vertex_references :: proc(mesh: Mesh) -> (invalid: bool) {
 	return false
 }
 
-mesh_validate_global_uniqueness :: proc(mesh: Mesh, allocator := context.temp_allocator) -> (failed: bool) {
+validate_global_uniqueness :: proc(mesh: Mesh, allocator := context.temp_allocator) -> (failed: bool) {
 	visited := make(map[Half_Edge_Index]struct{}, allocator)
 	defer delete(visited)
 
@@ -223,7 +223,7 @@ mesh_validate_global_uniqueness :: proc(mesh: Mesh, allocator := context.temp_al
 			}
 			visited[walk_idx] = {}
 
-			c := mesh_get_edge_unsafe(mesh, walk_idx)
+			c := get_edge_unsafe(mesh, walk_idx)
 			walk_idx = c.next
 
 			if walk_idx == start_idx do break

@@ -65,166 +65,166 @@ free_list_get_item_ptr_unsafe :: proc(free_list: Free_List($type, $type_index), 
 	return &free_list.all[index]
 }
 
-mesh_get_face_unsafe :: proc (mesh: Mesh, index: Face_Index) -> Face {
+get_face_unsafe :: proc (mesh: Mesh, index: Face_Index) -> Face {
 	return free_list_get_item_unsafe(mesh.faces, index)
 }
 
-mesh_get_vertex_unsafe :: proc (mesh: Mesh, index: Vertex_Index) -> Vertex {
+get_vertex_unsafe :: proc (mesh: Mesh, index: Vertex_Index) -> Vertex {
 	return free_list_get_item_unsafe(mesh.verts, index)
 }
 
-mesh_get_edge_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
+get_edge_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
 	return free_list_get_item_unsafe(mesh.edges, index)
 }
 
-mesh_get_face_ptr_unsafe :: proc (mesh: Mesh, index: Face_Index) -> ^Face {
+get_face_ptr_unsafe :: proc (mesh: Mesh, index: Face_Index) -> ^Face {
 	return free_list_get_item_ptr_unsafe(mesh.faces, index)
 }
 
-mesh_get_vertex_ptr_unsafe :: proc (mesh: Mesh, index: Vertex_Index) -> ^Vertex {
+get_vertex_ptr_unsafe :: proc (mesh: Mesh, index: Vertex_Index) -> ^Vertex {
 	return free_list_get_item_ptr_unsafe(mesh.verts, index)
 }
 
-mesh_get_edge_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
+get_edge_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
 	return free_list_get_item_ptr_unsafe(mesh.edges, index)
 }
 
-mesh_get_edge_next_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
-	return mesh_get_edge_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).next)
+get_edge_next_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
+	return get_edge_unsafe(mesh, get_edge_unsafe(mesh, index).next)
 }
 
-mesh_get_edge_prev_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
-	return mesh_get_edge_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).prev)
+get_edge_prev_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
+	return get_edge_unsafe(mesh, get_edge_unsafe(mesh, index).prev)
 }
 
-mesh_get_edge_opposite_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
-	return mesh_get_edge_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).opposite)
+get_edge_opposite_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Half_Edge {
+	return get_edge_unsafe(mesh, get_edge_unsafe(mesh, index).opposite)
 }
 
-mesh_get_edge_next_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
-	return mesh_get_edge_ptr_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).next)
+get_edge_next_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
+	return get_edge_ptr_unsafe(mesh, get_edge_unsafe(mesh, index).next)
 }
 
-mesh_get_edge_prev_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
-	return mesh_get_edge_ptr_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).prev)
+get_edge_prev_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
+	return get_edge_ptr_unsafe(mesh, get_edge_unsafe(mesh, index).prev)
 }
 
-mesh_get_edge_opposite_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
-	return mesh_get_edge_ptr_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).opposite)
+get_edge_opposite_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Half_Edge {
+	return get_edge_ptr_unsafe(mesh, get_edge_unsafe(mesh, index).opposite)
 }
 
-mesh_get_edge_source_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Vertex {
-	return mesh_get_vertex_unsafe(mesh, mesh_get_edge_prev_unsafe(mesh, index).vertex)
+get_edge_source_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Vertex {
+	return get_vertex_unsafe(mesh, get_edge_prev_unsafe(mesh, index).vertex)
 }
 
-mesh_get_edge_target_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Vertex {
-	return mesh_get_vertex_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).vertex)
+get_edge_target_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> Vertex {
+	return get_vertex_unsafe(mesh, get_edge_unsafe(mesh, index).vertex)
 }
 
-mesh_get_edge_source_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Vertex {
-	return mesh_get_vertex_ptr_unsafe(mesh, mesh_get_edge_prev_unsafe(mesh, index).vertex)
+get_edge_source_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Vertex {
+	return get_vertex_ptr_unsafe(mesh, get_edge_prev_unsafe(mesh, index).vertex)
 }
 
-mesh_get_edge_target_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Vertex {
-	return mesh_get_vertex_ptr_unsafe(mesh, mesh_get_edge_unsafe(mesh, index).vertex)
+get_edge_target_ptr_unsafe :: proc (mesh: Mesh, index: Half_Edge_Index) -> ^Vertex {
+	return get_vertex_ptr_unsafe(mesh, get_edge_unsafe(mesh, index).vertex)
 }
 
-mesh_get_face :: proc (mesh: Mesh, index: Face_Index) -> (face: Face, ok: bool) {
+get_face :: proc (mesh: Mesh, index: Face_Index) -> (face: Face, ok: bool) {
 	return free_list_get_item(mesh.faces, index)
 }
 
-mesh_get_vertex :: proc (mesh: Mesh, index: Vertex_Index) -> (vertex: Vertex, ok: bool) {
+get_vertex :: proc (mesh: Mesh, index: Vertex_Index) -> (vertex: Vertex, ok: bool) {
 	return free_list_get_item(mesh.verts, index)
 }
 
-mesh_get_edge :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
+get_edge :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
 	return free_list_get_item(mesh.edges, index)
 }
 
-mesh_get_face_ptr :: proc (mesh: Mesh, index: Face_Index) -> (face: ^Face, ok: bool) {
+get_face_ptr :: proc (mesh: Mesh, index: Face_Index) -> (face: ^Face, ok: bool) {
 	return free_list_get_item_ptr(mesh.faces, index)
 }
 
-mesh_get_vertex_ptr :: proc (mesh: Mesh, index: Vertex_Index) -> (vertex: ^Vertex, ok: bool) {
+get_vertex_ptr :: proc (mesh: Mesh, index: Vertex_Index) -> (vertex: ^Vertex, ok: bool) {
 	return free_list_get_item_ptr(mesh.verts, index)
 }
 
-mesh_get_edge_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
+get_edge_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
 	return free_list_get_item_ptr(mesh.edges, index)
 }
 
-mesh_get_edge_next :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
-	e := mesh_get_edge(mesh, index) or_return
-	return mesh_get_edge(mesh, e.next)
+get_edge_next :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
+	e := get_edge(mesh, index) or_return
+	return get_edge(mesh, e.next)
 }
 
-mesh_get_edge_prev :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
-	e := mesh_get_edge(mesh, index) or_return
-	return mesh_get_edge(mesh, e.prev)
+get_edge_prev :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
+	e := get_edge(mesh, index) or_return
+	return get_edge(mesh, e.prev)
 }
 
-mesh_get_edge_opposite :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
-	e := mesh_get_edge(mesh, index) or_return
-	return mesh_get_edge(mesh, e.opposite)
+get_edge_opposite :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: Half_Edge, ok: bool) {
+	e := get_edge(mesh, index) or_return
+	return get_edge(mesh, e.opposite)
 }
 
-mesh_get_edge_next_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
-	e := mesh_get_edge_ptr(mesh, index) or_return
-	return mesh_get_edge_ptr(mesh, e.next)
+get_edge_next_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
+	e := get_edge_ptr(mesh, index) or_return
+	return get_edge_ptr(mesh, e.next)
 }
 
-mesh_get_edge_prev_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
-	e := mesh_get_edge_ptr(mesh, index) or_return
-	return mesh_get_edge_ptr(mesh, e.prev)
+get_edge_prev_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
+	e := get_edge_ptr(mesh, index) or_return
+	return get_edge_ptr(mesh, e.prev)
 }
 
-mesh_get_edge_opposite_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
-	e := mesh_get_edge_ptr(mesh, index) or_return
-	return mesh_get_edge_ptr(mesh, e.opposite)
+get_edge_opposite_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (edge: ^Half_Edge, ok: bool) {
+	e := get_edge_ptr(mesh, index) or_return
+	return get_edge_ptr(mesh, e.opposite)
 }
 
-mesh_get_edge_source :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: Vertex, ok: bool) {
-	edge := mesh_get_edge(mesh, index) or_return
-	prev := mesh_get_edge(mesh, edge.prev) or_return
-	return mesh_get_vertex(mesh, prev.vertex)
+get_edge_source :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: Vertex, ok: bool) {
+	edge := get_edge(mesh, index) or_return
+	prev := get_edge(mesh, edge.prev) or_return
+	return get_vertex(mesh, prev.vertex)
 }
 
-mesh_get_edge_target :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: Vertex, ok: bool) {
-	edge := mesh_get_edge(mesh, index) or_return
-	return mesh_get_vertex(mesh, edge.vertex)
+get_edge_target :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: Vertex, ok: bool) {
+	edge := get_edge(mesh, index) or_return
+	return get_vertex(mesh, edge.vertex)
 }
 
-mesh_get_edge_source_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: ^Vertex, ok: bool) {
-	edge := mesh_get_edge(mesh, index) or_return
-	prev := mesh_get_edge(mesh, edge.prev) or_return
-	return mesh_get_vertex_ptr(mesh, prev.vertex)
+get_edge_source_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: ^Vertex, ok: bool) {
+	edge := get_edge(mesh, index) or_return
+	prev := get_edge(mesh, edge.prev) or_return
+	return get_vertex_ptr(mesh, prev.vertex)
 }
 
-mesh_get_edge_target_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: ^Vertex, ok: bool) {
-	edge := mesh_get_edge(mesh, index) or_return
-	return mesh_get_vertex_ptr(mesh, edge.vertex)
+get_edge_target_ptr :: proc (mesh: Mesh, index: Half_Edge_Index) -> (vertex: ^Vertex, ok: bool) {
+	edge := get_edge(mesh, index) or_return
+	return get_vertex_ptr(mesh, edge.vertex)
 }
 
-mesh_alloc_face :: proc(mesh: ^Mesh, face: Face) -> Face_Index {
+alloc_face :: proc(mesh: ^Mesh, face: Face) -> Face_Index {
 	return free_list_add(&mesh.faces, face)
 }
 
-mesh_alloc_half_edge :: proc(mesh: ^Mesh, half_edge: Half_Edge) -> Half_Edge_Index {
+alloc_half_edge :: proc(mesh: ^Mesh, half_edge: Half_Edge) -> Half_Edge_Index {
 	return free_list_add(&mesh.edges, half_edge)
 }
 
-mesh_alloc_vertex :: proc(mesh: ^Mesh, vertex: Vertex) -> Vertex_Index {
+alloc_vertex :: proc(mesh: ^Mesh, vertex: Vertex) -> Vertex_Index {
 	return free_list_add(&mesh.verts, vertex)
 }
 
-mesh_free_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) {
+free_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) {
 	free_list_remove(&mesh.edges, edge)
 }
 
-mesh_free_vertex :: proc(mesh: ^Mesh, vertex: Vertex_Index) {
+free_vertex :: proc(mesh: ^Mesh, vertex: Vertex_Index) {
 	free_list_remove(&mesh.verts, vertex)
 }
 
-mesh_free_face :: proc(mesh: ^Mesh, face: Face_Index) {
+free_face :: proc(mesh: ^Mesh, face: Face_Index) {
 	free_list_remove(&mesh.faces, face)
 }
