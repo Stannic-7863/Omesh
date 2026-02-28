@@ -7,24 +7,25 @@ import "core:log"
 import rl "vendor:raylib"
 import m "../"
 import c "../convay"
+import p "../convay/polygon"
 
 main :: proc() {
 	context.logger = log.create_console_logger(.Debug, {.Procedure, .Level, .Line, .Terminal_Color})
 	defer log.destroy_console_logger(context.logger)
 
-	platonic_solids := c.generate_all_platonic_solids()
+	platonic_solids := p.generate_all_platonic_solids()
 	defer m.destroy(..slice.enumerated_array(&platonic_solids))
 	defer m.validate(platonic_solids[.Cube])
 
 	// archimedean_solids := [c.Archimedean_Solid]m.Mesh{}
-	archimedean_solids := c.generate_all_archimedean_solids()
+	archimedean_solids := p.generate_all_archimedean_solids()
 	defer m.destroy(..slice.enumerated_array(&archimedean_solids))
 
 	// catalan_solids := [m.Catalan_Solid]m.Mesh{}
-	catalan_solids := c.generate_all_catalan_solids()
+	catalan_solids := p.generate_all_catalan_solids()
 	defer m.destroy(..slice.enumerated_array(&catalan_solids))
 
-	selected_type : union #no_nil {c.Platonic_Solid, c.Archimedean_Solid, c.Catalan_Solid} = .Tetrahedron
+	selected_type : union #no_nil {p.Platonic_Solid, p.Archimedean_Solid, p.Catalan_Solid} = .Tetrahedron
 
 	rl.InitWindow(1000, 1000, "Mesh")
 	defer rl.CloseWindow()
@@ -48,36 +49,36 @@ main :: proc() {
 		if rl.IsKeyPressed(.E) { draw_debug = ~draw_debug }
 		if rl.IsKeyPressed(.U) { selected_type = .Tetrahedron }
 		if rl.IsKeyPressed(.I) { selected_type = .Truncated_Tetrahedron }
-		if rl.IsKeyPressed(.P) { selected_type = .Triakis_Tetrahedron }
+		if rl.IsKeyPressed(.O) { selected_type = .Triakis_Tetrahedron }
 
 		if rl.IsKeyPressed(.LEFT) {
 			switch &v in selected_type {
-			case c.Platonic_Solid:		v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
-			case c.Archimedean_Solid:	v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
-			case c.Catalan_Solid:		v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
+			case p.Platonic_Solid:		v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
+			case p.Archimedean_Solid:	v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
+			case p.Catalan_Solid:		v = type_of(v) ( (int(v) + 1 + len(type_of(v))) % len(type_of(v)) )
 			}
 		}
 
 		if rl.IsKeyPressed(.RIGHT) {
 			switch &v in selected_type {
-			case c.Platonic_Solid:		v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
-			case c.Archimedean_Solid:	v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
-			case c.Catalan_Solid:		v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
+			case p.Platonic_Solid:		v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
+			case p.Archimedean_Solid:	v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
+			case p.Catalan_Solid:		v = type_of(v) ( (int(v) - 1 + len(type_of(v))) % len(type_of(v)) )
 			}
 		}
 
 		if rl.IsKeyPressed(.V) {
 			switch &v in selected_type {
-			case c.Platonic_Solid:		m.validate(platonic_solids[v])
-			case c.Archimedean_Solid:  	m.validate(archimedean_solids[v])
-			case c.Catalan_Solid:		m.validate(catalan_solids[v])
+			case p.Platonic_Solid:		m.validate(platonic_solids[v])
+			case p.Archimedean_Solid:  	m.validate(archimedean_solids[v])
+			case p.Catalan_Solid:		m.validate(catalan_solids[v])
 			}
 		}
 
 		start := rl.Vector2{70, 40}
 		size := rl.Vector2{100, 50}
 		margin := rl.Vector2{5, 5}
-		for o in c.Convay_Operation {
+		for o in c.Operation {
 			text := rl.TextFormat("%v", o)
 			text_size := rl.MeasureTextEx(rl.GetFontDefault(), text, 20, 1)
 			d_pos := start + {-text_size.x / 2 + size.x / 2 - 8 if text_size.x > size.x else 0, 0}
@@ -88,9 +89,9 @@ main :: proc() {
 				rl.DrawRectangleLinesEx({d_pos.x, d_pos.y, d_size.x, d_size.y}, 2, {80, 85, 100, 255})
 				if rl.IsMouseButtonPressed(.LEFT) {
 					switch v in selected_type {
-					case c.Catalan_Solid:		c.mesh_convay_operation(&catalan_solids[v], o)
-					case c.Platonic_Solid: 		c.mesh_convay_operation(&platonic_solids[v], o)
-					case c.Archimedean_Solid: 	c.mesh_convay_operation(&archimedean_solids[v], o)
+					case p.Catalan_Solid:		c.operation(&catalan_solids[v], o)
+					case p.Platonic_Solid: 		c.operation(&platonic_solids[v], o)
+					case p.Archimedean_Solid: 	c.operation(&archimedean_solids[v], o)
 					}
 				}
 			}
@@ -102,9 +103,9 @@ main :: proc() {
 			rl.DrawText(t, rl.GetScreenWidth() / 2 - rl.MeasureText(t, 20) / 2, 10, 20, rl.WHITE)
 			t = cstring("")
 			switch v in selected_type {
-			case c.Catalan_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(catalan_solids[v].verts.active), len(catalan_solids[v].faces.active), len(catalan_solids[v].edges.active))
-			case c.Platonic_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(platonic_solids[v].verts.active), len(platonic_solids[v].faces.active), len(platonic_solids[v].edges.active))
-			case c.Archimedean_Solid: 	t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(archimedean_solids[v].verts.active), len(archimedean_solids[v].faces.active), len(archimedean_solids[v].edges.active))
+			case p.Catalan_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(catalan_solids[v].verts.active), len(catalan_solids[v].faces.active), len(catalan_solids[v].edges.active))
+			case p.Platonic_Solid: 		t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(platonic_solids[v].verts.active), len(platonic_solids[v].faces.active), len(platonic_solids[v].edges.active))
+			case p.Archimedean_Solid: 	t = rl.TextFormat("Verts %v\nFaces %v\nEdges %v", len(archimedean_solids[v].verts.active), len(archimedean_solids[v].faces.active), len(archimedean_solids[v].edges.active))
 			}
 			rl.DrawText(t, rl.GetScreenWidth() / 2 - rl.MeasureText(t, 20) / 2, 40, 20, rl.WHITE)
 		}
@@ -115,9 +116,9 @@ main :: proc() {
 				rl.DrawRectangleLinesEx({start.x, start.y, size.x, size.y}, 2, {80, 85, 100, 255})
 				if rl.IsMouseButtonPressed(.LEFT) {
 					switch v in selected_type {
-					case c.Catalan_Solid:		m.destroy(catalan_solids[v]);		catalan_solids[v] = c.mesh_generate_catalan_solid(v)
-					case c.Platonic_Solid: 		m.destroy(platonic_solids[v]);		platonic_solids[v] = c.generate_platonic_solid(v)
-					case c.Archimedean_Solid: 	m.destroy(archimedean_solids[v]);	archimedean_solids[v] = c.mesh_generate_archimedean_solid(v)
+					case p.Catalan_Solid:		m.destroy(catalan_solids[v]);		catalan_solids[v] = p.generate_catalan_solid(v)
+					case p.Platonic_Solid: 		m.destroy(platonic_solids[v]);		platonic_solids[v] = p.generate_platonic_solid(v)
+					case p.Archimedean_Solid: 	m.destroy(archimedean_solids[v]);	archimedean_solids[v] = p.generate_archimedean_solid(v)
 					}
 				}
 			}
@@ -131,9 +132,9 @@ main :: proc() {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLACK)
 		switch v in selected_type {
-		case c.Catalan_Solid:		draw_mesh_edges(catalan_solids[v], camera, draw_debug)
-		case c.Platonic_Solid:		draw_mesh_edges(platonic_solids[v], camera, draw_debug)
-		case c.Archimedean_Solid: 	draw_mesh_edges(archimedean_solids[v], camera, draw_debug)
+		case p.Catalan_Solid:		draw_mesh_edges(catalan_solids[v], camera, draw_debug)
+		case p.Platonic_Solid:		draw_mesh_edges(platonic_solids[v], camera, draw_debug)
+		case p.Archimedean_Solid: 	draw_mesh_edges(archimedean_solids[v], camera, draw_debug)
 		}
 		rl.EndDrawing()
 	}
