@@ -178,7 +178,7 @@ create_triangle_emitter_iter :: proc(mesh: ^Mesh) -> Triangle_Emitter_Iterator {
 		face = face_index,
 		start = face.edge,
 		edge = get_edge_unsafe(mesh^, face.edge).next,
-		normal = normal
+		normal = normal,
 	}
 }
 
