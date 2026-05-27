@@ -1,5 +1,7 @@
 package polygon
 
+import "core:math"
+import "core:math/linalg"
 import c "../" // convay
 import m "../../" // mesh
 
@@ -411,4 +413,65 @@ generate_sierpinski_tetrahedron :: proc(depth: int, allocator := context.allocat
 
 	m.add_boundaries(&mesh)
 	return mesh
+}
+
+generate_torus :: proc(major_radius, minor_radius: f32, segment_count_u, segment_count_v: int, generate_u, generate_v: int, allocator := context.allocator) -> m.Mesh {
+    generate_u := min(segment_count_u, generate_u)
+    generate_v := min(segment_count_v, generate_v)
+
+    mesh := m.create(allocator)
+
+    // Generate all vertices from the parametric torus equation.
+    // x : major_radius * cos u + minor_radius * cos u * cos v
+    // y : major_radius * cos v + minor_radius * cos u * sin v
+    // z : minor_radius * sin v
+
+    for u in 0..<generate_u {
+        u_ratio := f32(u) / f32(segment_count_u)
+        theta := u_ratio * 2.0 * f32(linalg.PI)
+
+        cos_theta := math.cos(theta)
+        sin_theta := math.sin(theta)
+
+        for v in 0..<generate_v {
+            v_ratio := f32(v) / f32(segment_count_v)
+            phi := v_ratio * 2.0 * f32(linalg.PI)
+
+            cos_phi := math.cos(phi)
+            sin_phi := math.sin(phi)
+
+            x := (major_radius + minor_radius * cos_phi) * cos_theta
+            y := (major_radius + minor_radius * cos_phi) * sin_theta
+            z := minor_radius * sin_phi
+
+            m.add_vertices(&mesh, {x, y, z})
+        }
+    }
+
+    index :: proc(u, v, seg_v: int) -> m.Vertex_Index {
+        return m.Vertex_Index(u * seg_v + v)
+    }
+
+    wrap_u := generate_u == segment_count_u
+    wrap_v := generate_v == segment_count_v
+
+    max_u := generate_u if wrap_u else generate_u - 1
+    max_v := generate_v if wrap_v else generate_v - 1
+
+    for u in 0..<max_u {
+        next_u := (u + 1) % generate_u
+
+        for v in 0..<max_v {
+            next_v := (v + 1) % generate_v
+
+            a := index(u,      v,      generate_v)
+            b := index(next_u, v,      generate_v)
+            c := index(next_u, next_v, generate_v)
+            d := index(u,      next_v, generate_v)
+
+            m.add_faces(&mesh, {a, b, c, d})
+        }
+    }
+
+    return mesh
 }
