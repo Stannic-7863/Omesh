@@ -469,7 +469,7 @@ generate_torus :: proc(major_radius, minor_radius: f32, segment_count_u, segment
             c := index(next_u, next_v, gen_v)
             d := index(u,      next_v, gen_v)
 
-            m.add_faces(&mesh, {a, b, c, d})
+            m.add_faces(&mesh, {d, c, b, a})
         }
     }
 
