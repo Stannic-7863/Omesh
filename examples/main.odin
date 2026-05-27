@@ -41,10 +41,6 @@ main :: proc() {
 
 	draw_debug := false
 
-	positions := make([dynamic]m.Vec3f32)
-	indices := make([dynamic]i32)
-
-
 	for !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(.E) { draw_debug = ~draw_debug }
 		if rl.IsKeyPressed(.U) { selected_type = .Tetrahedron }
@@ -143,7 +139,6 @@ main :: proc() {
 draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 	OFFSET_MAGNITUDE: f32 = 0.025 if draw_debug else 0
 	SHORTEN_AMOUNT: f32 = 0.025 if draw_debug else 0
-	ARROW_SIZE: f32 = 0.01 if draw_debug else 0
 
 	mesh := mesh
 
@@ -181,7 +176,7 @@ draw_mesh_edges :: proc(mesh: m.Mesh, camera: rl.Camera3D, draw_debug: bool) {
 	for i in mesh.faces.active {
 		iter := m.create_face_edge_iterator(&mesh, i)
 		centroid := m.Vec3f32{}
-		for e, i in m.face_edge_forward_iter(&iter) {
+		for e in m.face_edge_forward_iter(&iter) {
 			centroid += m.get_vertex_unsafe(mesh, e.vertex).position
 		}
 		centroid /= f32(iter.step)

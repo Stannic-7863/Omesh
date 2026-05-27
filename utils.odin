@@ -1,7 +1,5 @@
 package mesh
 
-import "core:slice"
-import "core:container/queue"
 // TODO: handle allocator errors?
 
 free_list_create :: proc(free_list: ^Free_List($type, $type_index), allocator := context.allocator) {

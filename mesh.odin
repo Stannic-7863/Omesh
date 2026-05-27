@@ -133,7 +133,6 @@ face_edge_backward_iter :: proc(iter: ^Face_Edge_Iterator) -> (^Half_Edge, Half_
 
 create_vertex_edge_iterator :: proc(mesh: ^Mesh, vertex: Vertex_Index) -> Vertex_Edge_Iterator {
 	v := get_vertex_unsafe(mesh^, vertex)
-	edge := get_edge_unsafe(mesh^, v.edge)
 
 	return {
 		mesh = mesh,
@@ -224,7 +223,7 @@ dissolve_vertex_face_split :: proc(mesh: ^Mesh, vertex: Vertex_Index, temp_alloc
 
 	iter := create_vertex_edge_iterator(mesh, vertex)
 
-	for e, i in vertex_outgoing_edge_iter(&iter) {
+	for e in vertex_outgoing_edge_iter(&iter) {
         if e.face == -1 {
          	// TODO: Add a way to dissolve boundary vertex?
             log.error("Cannot dissolve boundary vertex")
@@ -380,7 +379,6 @@ dissolve_half_edge :: proc(mesh: ^Mesh, edge: Half_Edge_Index) -> (kept_face: Fa
 	}
 
 	selected_edge := get_edge_unsafe(mesh^, selected_edge_index)
-	to_be_deleted_index := selected_edge.opposite
 	to_be_deleted := get_edge_unsafe(mesh^, selected_edge.opposite)
 
 	if selected_edge.face != -1 {
@@ -461,7 +459,6 @@ add_face :: proc(mesh: ^Mesh, face: []Vertex_Index) -> Face_Index {
 		curr_vert_index := face[i]
 		next_vert_index := face[(i + 1) % n]
 
-		curr_vert := get_vertex_ptr_unsafe(mesh^, curr_vert_index)
 		next_vert := get_vertex_ptr_unsafe(mesh^, next_vert_index)
 
 		lookup_pair := Lookup_Pair{curr_vert_index, next_vert_index}
@@ -543,7 +540,6 @@ split_edge_twice :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index, factor :
 	e_next_index := e.next
 	e_op_next_index := e_op.next
 	e_prev_index := e.prev
-	e_op_prev_index := e_op.prev
 
 	target_index, source_index := e.vertex, e_op.vertex
 	target, source := get_vertex_ptr_unsafe(mesh^, target_index), get_vertex_ptr_unsafe(mesh^, source_index)
@@ -634,10 +630,8 @@ split_edge :: proc(mesh: ^Mesh, half_edge_index: Half_Edge_Index, factor := f32(
 	e_index := e_op.opposite
 	e_op_index := e.opposite
 	e_next_index := e.next
-	e_op_next_index := e_op.next
 
 	e_next := get_edge_ptr_unsafe(mesh^, e_next_index)
-	e_op_next := get_edge_ptr_unsafe(mesh^, e_op_next_index)
 
 	target_index, source_index := e.vertex, e_op.vertex
 	target, source := get_vertex_ptr_unsafe(mesh^, target_index), get_vertex_ptr_unsafe(mesh^, source_index)

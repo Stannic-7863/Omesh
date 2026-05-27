@@ -31,7 +31,7 @@ dual :: proc(mesh: ^m.Mesh, temp_alloc := context.temp_allocator) {
     for f in mesh.faces.active {
 		centroid := m.Vec3f32{}
 		iter := m.create_face_edge_iterator(mesh, f)
-		for e, i in m.face_edge_backward_iter(&iter) {
+		for e in m.face_edge_backward_iter(&iter) {
 			centroid += m.get_vertex_unsafe(mesh^, e.vertex).position
 		}
 		centroid /= f32(iter.step)
@@ -202,22 +202,22 @@ zip :: proc(mesh: ^m.Mesh, height := f32(0.5), temp_alloc := context.temp_alloca
 
 operation :: proc(mesh: ^m.Mesh, operation: Operation, temp_alloc := context.temp_allocator, ambo_factor := f32(0.5), truncate_factor := f32(2.0/3.0), gyro_height := f32(0.5), kis_height := f32(0.5)) {
 	switch operation {
-		case .Kis:						kis(mesh, kis_height, temp_alloc)
-		case .Zip:						zip(mesh, kis_height, temp_alloc)
-		case .Ambo:						ambo(mesh, ambo_factor, temp_alloc)
-		case .Dual:						dual(mesh, temp_alloc)
-		case .Snub:						snub(mesh, truncate_factor, gyro_height, kis_height, temp_alloc)
-		case .Join:						join(mesh, ambo_factor, temp_alloc)
-		case .Meta:						meta(mesh, ambo_factor, truncate_factor, temp_alloc)
-		case .Gyro:						gyro(mesh, truncate_factor, gyro_height, temp_alloc)
-		case .Ortho:					ortho(mesh, ambo_factor, temp_alloc)
-		case .Bevel:					bevel(mesh, ambo_factor, truncate_factor, temp_alloc)
-		case .Needle:					needle(mesh, kis_height, temp_alloc)
-		case .Expand:					expand(mesh, ambo_factor, temp_alloc)
-		case .Truncate:					truncate(mesh, truncate_factor, temp_alloc)
-		case .Classical_Snub:			classical_snub(mesh, ambo_factor, truncate_factor, temp_alloc)
-		case .Classical_Gyro:			classical_gyro(mesh, ambo_factor, truncate_factor, temp_alloc)
-		case .Classical_Alternation:	classical_alternation(mesh, temp_alloc)
+	case .Kis:						kis(mesh, kis_height, temp_alloc)
+	case .Zip:						zip(mesh, kis_height, temp_alloc)
+	case .Ambo:						ambo(mesh, ambo_factor, temp_alloc)
+	case .Dual:						dual(mesh, temp_alloc)
+	case .Snub:						snub(mesh, truncate_factor, gyro_height, kis_height, temp_alloc)
+	case .Join:						join(mesh, ambo_factor, temp_alloc)
+	case .Meta:						meta(mesh, ambo_factor, truncate_factor, temp_alloc)
+	case .Gyro:						gyro(mesh, truncate_factor, gyro_height, temp_alloc)
+	case .Ortho:					ortho(mesh, ambo_factor, temp_alloc)
+	case .Bevel:					bevel(mesh, ambo_factor, truncate_factor, temp_alloc)
+	case .Needle:					needle(mesh, kis_height, temp_alloc)
+	case .Expand:					expand(mesh, ambo_factor, temp_alloc)
+	case .Truncate:					truncate(mesh, truncate_factor, temp_alloc)
+	case .Classical_Snub:			classical_snub(mesh, ambo_factor, truncate_factor, temp_alloc)
+	case .Classical_Gyro:			classical_gyro(mesh, ambo_factor, truncate_factor, temp_alloc)
+	case .Classical_Alternation:	classical_alternation(mesh, temp_alloc)
 	}
 }
 

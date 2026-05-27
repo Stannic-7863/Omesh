@@ -32,9 +32,9 @@ validate :: proc(mesh: Mesh, temp_alloc := context.temp_allocator, caller_expres
 
 validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
 	for i in mesh.edges.active {
-		next, ok_next := get_edge_next(mesh, i)
-		prev, ok_prev := get_edge_prev(mesh, i)
-		opposite, ok_opposite := get_edge_opposite(mesh, i)
+		_, ok_next := get_edge_next(mesh, i)
+		_, ok_prev := get_edge_prev(mesh, i)
+		_, ok_opposite := get_edge_opposite(mesh, i)
 
 		if !(ok_next || ok_prev || ok_opposite) {
 			log.errorf("Invalid Next: %v, Invalid Prev: %v, Invalid Opposite: %v. Edge: %v", !ok_next, !ok_prev, !ok_opposite, get_edge_unsafe(mesh, i))
@@ -44,7 +44,7 @@ validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
 
 	for i in mesh.faces.active {
 		face := get_face_unsafe(mesh, i)
-		face_edge, ok := get_edge(mesh, face.edge)
+		_, ok := get_edge(mesh, face.edge)
 
 		if !ok {
 			log.errorf("Face does not reference an existing edge. Face: %v", face)
@@ -54,7 +54,7 @@ validate_base_constraints :: proc (mesh: Mesh) -> (invalide: bool) {
 
 	for i in mesh.verts.active {
 		vert := get_vertex_unsafe(mesh, i)
-		vert_edge, ok := get_edge(mesh, vert.edge)
+		_, ok := get_edge(mesh, vert.edge)
 
 		if !ok {
 			log.errorf("Vertex does not reference an existing edge. Vertex Index: %i, Vertex: %v", i, vert)
@@ -160,7 +160,6 @@ validate_face_loops :: proc( mesh: Mesh, allocator := context.temp_allocator) ->
 		lookup[start] = {}
 
 		for {
-			prev := curr
 			c := get_edge_unsafe(mesh, curr)
 			curr = c.next
 
