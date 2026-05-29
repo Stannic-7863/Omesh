@@ -116,8 +116,6 @@ gyro :: proc(mesh: ^m.Mesh, truncate_factor := f32(2.0/3.0), height := f32(0.5),
 			m.dissolve_half_edge(mesh, m.get_edge_unsafe(mesh^, e).next)
 			m.dissolve_half_edge(mesh, e)
 		}
-
-		delete(to_dissolve)
 	}
 }
 

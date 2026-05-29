@@ -1,6 +1,12 @@
 package mesh
 
-// TODO: handle allocator errors?
+import "base:intrinsics"
+
+Free_List :: struct ($type: typeid, $type_index: typeid) where intrinsics.type_is_integer(type_index) {
+	active: [dynamic]type_index,
+	free:	[dynamic]type_index,
+	all:	[dynamic]type,
+}
 
 free_list_create :: proc(free_list: ^Free_List($type, $type_index), allocator := context.allocator) {
 	free_list.active = make([dynamic]type_index, allocator)
@@ -39,14 +45,14 @@ free_list_remove :: proc(free_list: ^Free_List($type, $type_index), index: type_
 	if found { append(&free_list.free, index) }
 }
 
-free_list_is_item_free :: proc(free_list: Free_List($type, $type_index), index: type_index) -> (ok: bool) {
+free_list_is_item_active :: proc(free_list: Free_List($type, $type_index), index: type_index) -> (ok: bool) {
 	if index < 0 { return false }
 	for i in free_list.free { if index == i { return false } }
 	return true
 }
 
 free_list_get_item :: proc(free_list: Free_List($type, $type_index), index: type_index) -> (item: type, ok: bool) {
-	free_list_is_item_free(free_list, index) or_return
+	free_list_is_item_active(free_list, index) or_return
 	return free_list.all[index], true
 }
 
@@ -55,7 +61,7 @@ free_list_get_item_unsafe :: proc(free_list: Free_List($type, $type_index), inde
 }
 
 free_list_get_item_ptr :: proc(free_list: Free_List($type, $type_index), index: type_index) -> (item: ^type, ok: bool) {
-	free_list_is_item_free(free_list, index) or_return
+	free_list_is_item_active(free_list, index) or_return
 	return &free_list.all[index], true
 }
 
@@ -225,4 +231,16 @@ free_vertex :: proc(mesh: ^Mesh, vertex: Vertex_Index) {
 
 free_face :: proc(mesh: ^Mesh, face: Face_Index) {
 	free_list_remove(&mesh.faces, face)
+}
+
+get_edge_count :: proc(mesh: ^Mesh) -> int {
+	return len(mesh.edges.active)
+}
+
+get_face_count :: proc(mesh: ^Mesh) -> int {
+	return len(mesh.faces.active)
+}
+
+get_vertex_count :: proc(mesh: ^Mesh) -> int {
+	return len(mesh.verts.active)
 }

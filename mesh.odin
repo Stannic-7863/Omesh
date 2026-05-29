@@ -38,12 +38,6 @@ Lookup_Pair :: struct {
 	source, target: Vertex_Index,
 }
 
-Free_List :: struct ($type: typeid, $type_index: typeid) where intrinsics.type_is_integer(type_index) {
-	active: [dynamic]type_index,
-	free:	[dynamic]type_index,
-	all:	[dynamic]type,
-}
-
 Mesh :: struct {
 	faces:      Free_List(Face, Face_Index),
 	verts:      Free_List(Vertex, Vertex_Index),
@@ -67,10 +61,10 @@ Vertex_Edge_Iterator :: struct {
 
 Triangle_Emitter_Iterator :: struct {
 	mesh:			^Mesh,
-	walk_step:		i32,
-	vertex_step:	i32,
-	vertex_base:	i32,
-	face_step:  	i32,
+	walk_step:      int,
+	vertex_step:    int,
+	vertex_base:    int,
+	face_step:      int,
 	face:			Face_Index,
 	edge:			Half_Edge_Index,
 	start:			Half_Edge_Index,
@@ -181,9 +175,9 @@ create_triangle_emitter_iter :: proc(mesh: ^Mesh) -> Triangle_Emitter_Iterator {
 	}
 }
 
-triangle_emitter_indexed_flat_iter :: proc(iter: ^Triangle_Emitter_Iterator) -> (count: i32, positions: [3]Vec3f32, normal: Vec3f32, indices: [3]i32, ok: bool) {
+triangle_emitter_indexed_flat_iter :: proc(iter: ^Triangle_Emitter_Iterator) -> (count: i32, positions: [3]Vec3f32, normal: Vec3f32, indices: [3]int, ok: bool) {
 	if get_edge_unsafe(iter.mesh^, iter.edge).next == iter.start { // loop till < n-1
-		if iter.face_step < i32(len(iter.mesh.faces.active) - 1) {
+		if iter.face_step < get_face_count(iter.mesh) - 1 {
 			iter.walk_step = 0
 			iter.face_step += 1
 			iter.face = iter.mesh.faces.active[iter.face_step]
@@ -885,13 +879,20 @@ calculate_face_normal :: proc(mesh: ^Mesh, face: Face_Index) -> Vec3f32 { // New
 	return linalg.normalize0(normal)
 }
 
-normalize_onto_sphere :: proc(mesh: ^Mesh) {
+normalize :: proc(mesh: ^Mesh) {
 	length := f32(0)
 	for v in mesh.verts.active {
 		length = max(length, linalg.length(get_vertex_unsafe(mesh^, v).position))
 	}
 
 	for v in mesh.verts.active {
+		get_vertex_ptr_unsafe(mesh^, v).position /= length
+	}
+}
+
+project_onto_sphere :: proc(mesh: ^Mesh) {
+	for v in mesh.verts.active {
+		length := linalg.length(get_vertex_unsafe(mesh^, v).position)
 		get_vertex_ptr_unsafe(mesh^, v).position /= length
 	}
 }

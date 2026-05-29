@@ -60,7 +60,7 @@ generate_tetrahedron :: proc(allocator := context.allocator) -> m.Mesh {
 	mesh := m.create(allocator)
 	m.add_vertices(&mesh, {1, 1, 1}, {-1, -1, 1}, {-1, 1, -1}, {1, -1, -1})
 	m.add_faces(&mesh, {0, 1, 2}, {0, 2, 3}, {0, 3, 1}, {1, 3, 2})
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -68,7 +68,7 @@ generate_cube :: proc(allocator := context.allocator) -> m.Mesh {
 	mesh := m.create(allocator)
 	m.add_vertices(&mesh, {1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {1, -1, 1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, -1})
 	m.add_faces(&mesh, {3, 2, 1, 0}, {3, 0, 5, 4}, {4, 5, 6, 7}, {7, 6, 1, 2}, {6, 5, 0, 1}, {2, 3, 4, 7})
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -76,7 +76,7 @@ generate_octahedron :: proc(allocator := context.allocator) -> m.Mesh {
 	mesh := m.create(allocator)
 	m.add_vertices(&mesh, { 1,  0,  0},{-1,  0,  0},{ 0,  1,  0},{ 0, -1,  0},{ 0,  0,  1},{ 0,  0, -1})
 	m.add_faces(&mesh,{0, 4, 2},{2, 4, 1},{1, 4, 3},{3, 4, 0},{2, 5, 0},{1, 5, 2},{3, 5, 1},{0, 5, 3})
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -94,7 +94,7 @@ generate_icosahedron :: proc(allocator := context.allocator) -> m.Mesh {
 		{6, 2, 3}, {8, 6, 3}, {9, 8, 3}, {5, 9, 4},
 		{11, 4, 2}, {10, 2, 6}, {7, 6, 8}, {1, 8, 9},
 	)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -115,7 +115,7 @@ generate_dodecahedron :: proc(allocator := context.allocator) -> m.Mesh {
         {5, 9, 1, 12, 14},   {5, 14, 4, 18, 19},  {5, 19, 7, 11, 9},
         {6, 10, 2, 13, 15},  {6, 15, 7, 19, 18},  {6, 18, 4, 8, 10},
     )
-    m.normalize_onto_sphere(&mesh)
+    m.normalize(&mesh)
     return mesh
 }
 
@@ -141,28 +141,28 @@ generate_all_platonic_solids :: proc(allocator := context.allocator) -> [Platoni
 generate_truncated_tetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_tetrahedron(allocator)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_cuboctahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_truncated_cube :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_truncated_octahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_octahedron(allocator)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -170,7 +170,7 @@ generate_rhombicuboctahedron :: proc(allocator := context.allocator, temp_alloc 
 	mesh := generate_cube(allocator)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -178,35 +178,35 @@ generate_truncated_cuboctahedron :: proc(allocator := context.allocator, temp_al
 	mesh := generate_cube(allocator)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_snub_cube :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.classical_snub(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_icosidodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_truncated_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_truncated_icosahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_icosahedron(allocator)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -214,7 +214,7 @@ generate_rhombicosidodecahedron :: proc(allocator := context.allocator, temp_all
 	mesh := generate_dodecahedron(allocator)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -222,14 +222,14 @@ generate_truncated_icosidodecahedron :: proc(allocator := context.allocator, tem
 	mesh := generate_dodecahedron(allocator)
 	c.ambo(&mesh, temp_alloc = temp_alloc)
 	c.truncate(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_snub_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.classical_snub(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
@@ -263,91 +263,91 @@ generate_all_archimedean_solids :: proc(allocator := context.allocator, temp_all
 generate_triakis_tetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_tetrahedron(allocator)
 	c.kis(&mesh, CATALAN_TRI_TETRAHEDRON_KIS_HEIGHT, temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_rhombic_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.join(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_triakis_octahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_octahedron(allocator)
 	c.kis(&mesh, CATALAN_TRI_OCTAHEDRON_KIS_HEIGHT, temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_tetrakis_hexahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.kis(&mesh, CATALAN_TETRA_HEXAHEDRON_KIS_HEIGHT, temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_deltoidal_icositetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.ortho(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_disdyakis_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.meta(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_pentagonal_icositetrahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_cube(allocator)
 	c.classical_gyro(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_rhombic_triacontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
-	c.join(&mesh)
-	m.normalize_onto_sphere(&mesh)
+	c.join(&mesh, temp_alloc = temp_alloc)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_triakis_icosahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_icosahedron(allocator)
 	c.kis(&mesh, CATALAN_TRI_ICOSAHEDRON_KIS_HEIGHT, temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_pentakis_dodecahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.kis(&mesh, CATALAN_PENTA_DODECAHEDRON_KIS_HEIGHT, temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_deltoidal_hexecontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.ortho(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_disdyakis_triacontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.meta(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
 generate_pentagonal_hexecontahedron :: proc(allocator := context.allocator, temp_alloc := context.temp_allocator) -> m.Mesh {
 	mesh := generate_dodecahedron(allocator)
 	c.classical_gyro(&mesh, temp_alloc = temp_alloc)
-	m.normalize_onto_sphere(&mesh)
+	m.normalize(&mesh)
 	return mesh
 }
 
