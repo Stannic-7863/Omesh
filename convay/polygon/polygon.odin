@@ -1,5 +1,6 @@
 package polygon
 
+import "core:compress/shoco"
 import "core:math"
 import "core:math/linalg"
 import c "../" // convay
@@ -474,4 +475,11 @@ generate_torus :: proc(major_radius, minor_radius: f32, segment_count_u, segment
     }
 
     return mesh
+}
+
+generate_plane :: proc(allocator := context.allocator) -> m.Mesh {
+	mesh := m.create(allocator)
+	m.add_vertices(&mesh, {1, -1, 0}, {-1, -1, 0}, {-1, 1, 0}, {1, 1, 0})
+	m.add_faces(&mesh, {0, 1, 2, 3})
+	return mesh
 }
