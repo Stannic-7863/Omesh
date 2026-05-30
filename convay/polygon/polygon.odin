@@ -481,5 +481,63 @@ generate_plane :: proc(allocator := context.allocator) -> m.Mesh {
 	mesh := m.create(allocator)
 	m.add_vertices(&mesh, {1, -1, 0}, {-1, -1, 0}, {-1, 1, 0}, {1, 1, 0})
 	m.add_faces(&mesh, {0, 1, 2, 3})
+	m.add_boundaries(&mesh)
 	return mesh
+}
+
+generate_cylinder :: proc(radius: f32, height: f32, segments: int, cap_top := true, cap_bottom := true, allocator := context.allocator) -> m.Mesh {
+    mesh := m.create(allocator)
+
+    half_h := height * 0.5
+
+    for i in 0..<segments {
+        t := f32(i) / f32(segments)
+        angle := t * 2.0 * f32(linalg.PI)
+
+        x := radius * math.cos(angle)
+        z := radius * math.sin(angle)
+
+        m.add_vertices(&mesh, {x, -half_h, z},  {x,  half_h, z})
+    }
+
+    for i in 0..<segments {
+        next := (i + 1) % segments
+
+        b0 := m.Vertex_Index(i * 2 + 0)
+        t0 := m.Vertex_Index(i * 2 + 1)
+
+        b1 := m.Vertex_Index(next * 2 + 0)
+        t1 := m.Vertex_Index(next * 2 + 1)
+
+        m.add_faces(&mesh, {b0, b1, t1, t0})
+    }
+
+    if cap_bottom {
+        center := m.add_vertex(&mesh, {0, -half_h, 0})
+
+        for i in 0..<segments {
+            next := (i + 1) % segments
+
+            b0 := m.Vertex_Index(i * 2 + 0)
+            b1 := m.Vertex_Index(next * 2 + 0)
+
+            m.add_faces(&mesh, {center, b1, b0})
+        }
+    }
+
+    if cap_top {
+        center := m.add_vertex(&mesh, {0, half_h, 0})
+
+        for i in 0..<segments {
+            next := (i + 1) % segments
+
+            t0 := m.Vertex_Index(i * 2 + 1)
+            t1 := m.Vertex_Index(next * 2 + 1)
+
+            m.add_faces(&mesh, {center, t0, t1})
+        }
+    }
+
+    m.add_boundaries(&mesh)
+    return mesh
 }
